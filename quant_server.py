@@ -20,7 +20,19 @@ import urllib.parse
 import urllib.error
 
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": [
+                r"^https?://localhost(:\d+)?$",
+                r"^https?://127\.0\.0\.1(:\d+)?$",
+                "null",
+            ]
+        }
+    },
+    supports_credentials=True,
+)
 
 def _get_app_dir():
     if getattr(sys, 'frozen', False):

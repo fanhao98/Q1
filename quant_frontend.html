@@ -33,8 +33,61 @@
             }
         })();
     </script>
-    <!-- 引入ECharts库 - 本地文件 -->
-    <script src="echarts.min.js"></script>
+    <script>
+        function showChartError(message) {
+            const chartContainers = document.querySelectorAll('.chart');
+            chartContainers.forEach(container => {
+                container.innerHTML = '<div class="chart-loading">' + message + '</div>';
+            });
+        }
+
+        (function loadECharts() {
+            const sources = [
+                'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js',
+                'https://unpkg.com/echarts@5/dist/echarts.min.js',
+                'echarts.min.js'
+            ];
+
+            function triggerInitCharts() {
+                const tryCall = () => {
+                    if (typeof window.initCharts === 'function') {
+                        window.initCharts();
+                        return;
+                    }
+                    setTimeout(tryCall, 200);
+                };
+                setTimeout(tryCall, 0);
+            }
+
+            function tryLoad(index) {
+                if (index >= sources.length) {
+                    console.error('❌ ECharts库加载失败');
+                    showChartError('图表库加载失败，请检查网络或提供 echarts.min.js');
+                    return;
+                }
+                const src = sources[index];
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => {
+                    console.log('✅ ECharts库加载成功:', src);
+                    if (typeof window.applyEChartsPerformancePatch === 'function') {
+                        try {
+                            window.applyEChartsPerformancePatch();
+                        } catch (e) {
+                        }
+                    }
+                    triggerInitCharts();
+                };
+                script.onerror = () => {
+                    tryLoad(index + 1);
+                };
+                document.head.appendChild(script);
+            }
+
+            tryLoad(0);
+        })();
+    </script>
     <script>
         // 全局事件监听器优化 (解决 [Violation] Added non-passive event listener 警告)
         (function() {
@@ -62,42 +115,26 @@
             }
         })();
 
-        // ECharts 性能优化配置
-        if (typeof echarts !== 'undefined') {
-            // 重写 echarts.init 以添加性能优化
-            const originalInit = echarts.init;
-            echarts.init = function(dom, theme, opts) {
-                // 性能优化选项
-                const performanceOpts = {
-                    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-                    renderer: 'canvas',
-                    useDirtyRect: true,
-                    ...opts
+        window.applyEChartsPerformancePatch = function () {
+            if (typeof echarts === 'undefined') return;
+            if (echarts && echarts.__quantPerformancePatched) return;
+            try {
+                const originalInit = echarts.init;
+                echarts.init = function(dom, theme, opts) {
+                    const performanceOpts = {
+                        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+                        renderer: 'canvas',
+                        useDirtyRect: true,
+                        ...opts
+                    };
+                    return originalInit.call(this, dom, theme, performanceOpts);
                 };
-                
-                // 调用原始初始化函数
-                const chart = originalInit.call(this, dom, theme, performanceOpts);
-                
-                return chart;
-            };
-        }
+                echarts.__quantPerformancePatched = true;
+            } catch (e) {
+            }
+        };
+        window.applyEChartsPerformancePatch();
     </script>
-    <script>
-        // ECharts加载完成后自动初始化图表
-        if (typeof echarts !== 'undefined' && typeof echarts.init === 'function') {
-            console.log('✅ ECharts库加载成功');
-            // 延迟执行以确保DOM完全加载
-            setTimeout(function() {
-                if (typeof window.initCharts === 'function') {
-                    window.initCharts();
-                }
-            }, 500);
-        } else {
-            console.error('❌ ECharts库加载失败');
-            showChartError('图表库加载失败，请检查echarts.min.js文件是否存在');
-        }
-    </script>
-     
      <!-- 简化的ECharts加载监控 -->
     <script>
         // 简化的ECharts加载检查
@@ -107,14 +144,6 @@
                 return true;
             }
             return false;
-        }
-        
-        // 显示图表错误
-        function showChartError(message) {
-            const chartContainers = document.querySelectorAll('.chart');
-            chartContainers.forEach(container => {
-                container.innerHTML = '<div class="chart-loading">' + message + '</div>';
-            });
         }
         
         // 将initCharts函数暴露给全局，供ECharts加载完成后调用
@@ -4684,7 +4713,7 @@ TUSHARE_TOKEN=你的token
         async function fetchLocalStateKey(key) {
             if (!key) return null;
             try {
-                const resp = await fetch(`${API_BASE}/local_state?key=${encodeURIComponent(key)}`);
+                const resp = await fetch(`${API_BASE}/local_state?key=${encodeURIComponent(key)}`, { credentials: 'omit' });
                 if (!resp.ok) return null;
                 const json = await resp.json();
                 if (!json || !json.success) return null;
@@ -4707,7 +4736,8 @@ TUSHARE_TOKEN=你的token
             try {
                 const payload = JSON.stringify({ key, value });
                 const url = `${API_BASE}/local_state`;
-                if (typeof navigator !== 'undefined' && navigator && typeof navigator.sendBeacon === 'function') {
+                const isFileOrigin = (typeof location !== 'undefined' && location && location.protocol === 'file:') || (typeof location !== 'undefined' && location && location.origin === 'null');
+                if (!isFileOrigin && typeof navigator !== 'undefined' && navigator && typeof navigator.sendBeacon === 'function') {
                     try {
                         const blob = new Blob([payload], { type: 'application/json' });
                         const ok = navigator.sendBeacon(url, blob);
@@ -4719,7 +4749,8 @@ TUSHARE_TOKEN=你的token
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: payload,
-                    keepalive: true
+                    keepalive: true,
+                    credentials: 'omit'
                 }).catch(() => {});
             } catch (e) {
             }
@@ -4732,7 +4763,8 @@ TUSHARE_TOKEN=你的token
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key, value }),
-                    keepalive: !!options.keepalive
+                    keepalive: !!options.keepalive,
+                    credentials: 'omit'
                 });
                 if (!resp.ok) return false;
                 const json = await resp.json();

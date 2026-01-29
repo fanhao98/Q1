@@ -49,3 +49,7 @@ test_*.py
 .env.test.local
 .env.production.local
 .vercel
+local_state/
+data/
+tushare_token.txt
+
