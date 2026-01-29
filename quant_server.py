@@ -220,6 +220,19 @@ _PRO_INIT_ERROR = ''
 _PRO_INIT_LOCK = threading.Lock()
 
 
+def _is_writable_dir(path):
+    if not path or not os.path.isdir(path):
+        return False
+    probe = os.path.join(path, '.probe_write')
+    try:
+        with open(probe, 'w', encoding='utf-8') as f:
+            f.write('')
+        os.remove(probe)
+        return True
+    except Exception:
+        return False
+
+
 def _init_tushare_pro():
     global TUSHARE_TOKEN, TUSHARE_TOKEN_SOURCE, pro, _PRO_INIT_ERROR
     token, source = _load_tushare_token()
@@ -228,10 +241,28 @@ def _init_tushare_pro():
 
     print("正在初始化Tushare...")
     try:
+        if os.environ.get('VERCEL') and os.name != 'nt':
+            fallback_home = DATA_ROOT or '/tmp'
+            try:
+                os.makedirs(fallback_home, exist_ok=True)
+            except Exception:
+                pass
+            current_home = os.environ.get('HOME')
+            if not _is_writable_dir(current_home):
+                os.environ['HOME'] = fallback_home
+            current_userprofile = os.environ.get('USERPROFILE')
+            if not _is_writable_dir(current_userprofile):
+                os.environ['USERPROFILE'] = fallback_home
+            os.environ.setdefault('XDG_CACHE_HOME', fallback_home)
+            os.environ.setdefault('XDG_CONFIG_HOME', fallback_home)
+
         if not TUSHARE_TOKEN:
             raise RuntimeError("未配置Tushare Token，请设置环境变量TUSHARE_TOKEN/TS_TOKEN或在数据目录放置tushare_token.txt")
-        ts.set_token(TUSHARE_TOKEN)
-        pro = ts.pro_api()
+        try:
+            ts.set_token(TUSHARE_TOKEN)
+        except Exception:
+            pass
+        pro = ts.pro_api(TUSHARE_TOKEN)
         _PRO_INIT_ERROR = ''
         print("✓ Tushare初始化成功")
         return pro
