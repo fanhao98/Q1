@@ -33,6 +33,8 @@ RESOURCE_DIR = getattr(sys, '_MEIPASS', APP_DIR)
 
 
 def _get_data_root():
+    if os.environ.get('VERCEL'):
+        return '/tmp'
     configured = os.getenv('QUANT_DATA_DIR')
     if configured:
         return configured

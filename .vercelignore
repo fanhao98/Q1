@@ -1,0 +1,20 @@
+# Vercel ignore
+.vercel
+.git
+.idea
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.csv
+*.db
+*.sqlite
+data/
+local_state/
+node_modules/
+build/
+dist/
+.env
+.env.*
