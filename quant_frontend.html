@@ -94,7 +94,7 @@
             if (typeof EventTarget !== 'undefined') {
                 const originalAddEventListener = EventTarget.prototype.addEventListener;
                 EventTarget.prototype.addEventListener = function(type, listener, options) {
-                    if (type === 'wheel' || type === 'mousewheel' || type === 'touchstart' || type === 'touchmove') {
+                    if (type === 'touchstart' || type === 'touchmove') {
                         // 默认开启 passive: true 以优化性能和消除警告
                         if (typeof options === 'boolean') {
                             options = { capture: options, passive: true };
