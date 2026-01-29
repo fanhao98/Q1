@@ -1781,9 +1781,19 @@ def api_get_concept_list():
     try:
         df = None
         try:
-            df = pro_client.concept(src='ts')
+            concept_func = getattr(pro_client, 'concept', None)
+            if callable(concept_func):
+                try:
+                    df = concept_func(src='ts')
+                except Exception:
+                    df = concept_func()
+            else:
+                try:
+                    df = pro_client.query('concept', src='ts')
+                except Exception:
+                    df = pro_client.query('concept')
         except Exception:
-            df = pro_client.concept()
+            df = pro_client.query('concept')
         if df is None or df.empty:
             return jsonify({'success': True, 'count': 0, 'data': [], 'cached': False})
 
@@ -1801,7 +1811,11 @@ def api_get_concept_list():
         return jsonify({'success': True, 'count': len(normalized), 'data': normalized, 'cached': False})
     except Exception as e:
         print(f"获取概念列表错误: {e}")
-        return jsonify({'success': True, 'count': 0, 'data': [], 'cached': False, 'message': '概念列表获取失败'})
+        debug = (request.args.get('debug') or '').strip() == '1'
+        payload = {'success': True, 'count': 0, 'data': [], 'cached': False, 'message': '概念列表获取失败'}
+        if debug:
+            payload['error'] = str(e)
+        return jsonify(payload)
 
 
 @app.route('/api/concept_members', methods=['GET'])
@@ -1838,9 +1852,19 @@ def api_get_concept_members():
         try:
             df = None
             try:
-                df = pro_client.concept_detail(id=concept_code)
+                detail_func = getattr(pro_client, 'concept_detail', None)
+                if callable(detail_func):
+                    try:
+                        df = detail_func(id=concept_code)
+                    except Exception:
+                        df = detail_func(concept_id=concept_code)
+                else:
+                    try:
+                        df = pro_client.query('concept_detail', id=concept_code)
+                    except Exception:
+                        df = pro_client.query('concept_detail', concept_id=concept_code)
             except Exception:
-                df = pro_client.concept_detail(concept_id=concept_code)
+                df = pro_client.query('concept_detail', id=concept_code)
             if df is None or df.empty:
                 by_code[concept_code] = []
                 continue
