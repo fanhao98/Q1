@@ -49,6 +49,17 @@ test_*.py
 .env.test.local
 .env.production.local
 .vercel
+.trae/
+build/
+dist/
+concept_members/
+stock_list_cache.json
+concept_list_cache.json
+index_constituents_cache.json
+quant_settings_*.json
+fjm.json
+.venv/
+.venv*/
 local_state/
 data/
 tushare_token.txt
