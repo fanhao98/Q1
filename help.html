@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📖 使用帮助 - 量化交易系统</title>
+    <script>
+        (function () {
+            try {
+                const raw = localStorage.getItem('quant_ui_state_v1') || localStorage.getItem('quant_theme');
+                if (!raw) return;
+                if (raw === 'light' || raw === 'dark') {
+                    document.documentElement.setAttribute('data-theme', raw);
+                    return;
+                }
+                const state = JSON.parse(raw);
+                const theme = state && (state.theme || state.appearance);
+                if (theme === 'light' || theme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            } catch (e) {
+            }
+        })();
+    </script>
+    <style>
+        html {
+            font-size: 14px;
+        }
+
+        html[data-theme="dark"], :root {
+            --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            --radius: 12px;
+            --app-bg: linear-gradient(135deg, #0c1929 0%, #141a2d 50%, #111c33 100%);
+            --surface: rgba(17, 24, 39, 0.75);
+            --surface-2: rgba(20, 28, 45, 0.72);
+            --border: rgba(102, 126, 234, 0.28);
+            --text: rgba(255, 255, 255, 0.92);
+            --text-muted: rgba(255, 255, 255, 0.68);
+            --accent: #8aa1ff;
+            --accent-2: #667eea;
+            --shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }
+
+        html[data-theme="light"] {
+            --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            --radius: 12px;
+            --app-bg: linear-gradient(135deg, #f6f8ff 0%, #f3f6ff 50%, #eef3ff 100%);
+            --surface: rgba(255, 255, 255, 0.92);
+            --surface-2: rgba(255, 255, 255, 0.75);
+            --border: rgba(15, 23, 42, 0.12);
+            --text: rgba(15, 23, 42, 0.92);
+            --text-muted: rgba(15, 23, 42, 0.82);
+            --accent: #2563eb;
+            --accent-2: #7c3aed;
+            --shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
+        }
+
+        html[data-theme="dark"] { color-scheme: dark; }
+        html[data-theme="light"] { color-scheme: light; }
+
+        body {
+            margin: 0;
+            font-family: var(--font-family);
+            background: var(--app-bg);
+            color: var(--text);
+        }
+
+        .wrap {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 22px 16px 80px;
+        }
+
+        .header {
+            background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 55%, #ec4899 100%);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: 800;
+            margin: 0 0 6px 0;
+            color: #fff;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+
+        .subtitle {
+            margin: 0;
+            color: rgba(255,255,255,0.92);
+            font-size: 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 14px;
+            margin-top: 14px;
+        }
+
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+
+        .nav, .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .nav {
+            padding: 12px 12px;
+            position: sticky;
+            top: 12px;
+            height: fit-content;
+        }
+
+        .nav h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            color: var(--text-muted);
+            letter-spacing: 0.2px;
+        }
+
+        .nav a {
+            display: block;
+            padding: 8px 10px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: var(--text);
+            border: 1px solid transparent;
+        }
+
+        .nav a:hover {
+            border-color: var(--border);
+            background: var(--surface-2);
+        }
+
+        .card {
+            padding: 14px 16px;
+        }
+
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: var(--accent-2);
+        }
+
+        h3 {
+            margin: 14px 0 8px 0;
+            font-size: 14px;
+            color: var(--accent);
+        }
+
+        p {
+            margin: 8px 0;
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        ul {
+            margin: 8px 0 12px 18px;
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        .note {
+            margin: 10px 0;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text-muted);
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 1px 6px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-2);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            color: var(--text);
+        }
+
+        .link {
+            color: var(--accent-2);
+            text-decoration: none;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="header">
+            <h1 class="title">📖 使用帮助</h1>
+            <p class="subtitle">覆盖：数据获取、策略对比、筛选、股池、详细分析、参数优化、外观主题、常见问题</p>
+        </div>
+
+        <div class="grid">
+            <div class="nav">
+                <h3>目录</h3>
+                <a href="#quickstart">快速开始</a>
+                <a href="#tabs">界面结构</a>
+                <a href="#data">数据与缓存</a>
+                <a href="#comparison">策略对比</a>
+                <a href="#details">详细分析</a>
+                <a href="#screening">股票筛选</a>
+                <a href="#pool">股票池</a>
+                <a href="#optimization">参数优化</a>
+                <a href="#appearance">外观主题</a>
+                <a href="#faq">常见问题</a>
+            </div>
+
+            <div class="card">
+                <section id="quickstart">
+                    <h2>快速开始</h2>
+                    <ul>
+                        <li>启动后端服务：运行 quant_server.py，浏览器访问 <span class="kbd">http://localhost:5000</span>。</li>
+                        <li>设置回测参数：左侧输入股票代码、初始资金、开始/结束日期。</li>
+                        <li>选择策略：在“策略选择（多选对比）”中勾选一个或多个策略。</li>
+                        <li>获取数据并运行：进入“对比”或“详细分析”，点击相应按钮获取数据、运行回测。</li>
+                        <li>筛选与入池：进入“筛选”，选择范围与策略进行筛选；勾选结果后手动加入股池。</li>
+                    </ul>
+                    <div class="note">提示：系统会自动保存常用设置（外观、筛选条件、策略勾选、股票/日期等），下次打开无需重复设置。</div>
+                </section>
+
+                <section id="tabs">
+                    <h2>界面结构</h2>
+                    <p>主界面通常包含 4 个核心区域：</p>
+                    <ul>
+                        <li>左侧：连接状态、回测设置、外观切换、帮助入口。</li>
+                        <li>顶部：系统标题、时间与数据来源提示。</li>
+                        <li>中间/右侧：标签页（对比/筛选/详细/股池/优化等）。</li>
+                        <li>弹出层：加载进度、提示信息、下拉选择（行业等）。</li>
+                    </ul>
+                </section>
+
+                <section id="data">
+                    <h2>数据与缓存</h2>
+                    <h3>数据来源</h3>
+                    <ul>
+                        <li>优先使用本地缓存数据，提高速度。</li>
+                        <li>后端可从 Tushare 获取真实行情；若网络或权限不足，可能回退到模拟数据（视实现而定）。</li>
+                    </ul>
+                    <h3>缓存机制</h3>
+                    <ul>
+                        <li>前端会缓存已请求的时间区间数据，重复回测无需再次下载。</li>
+                        <li>前端会保存“上次会话”的股票与日期，以便快速恢复。</li>
+                        <li>股池会持久化保存（用于跨会话继续跟踪）。</li>
+                    </ul>
+                </section>
+
+                <section id="comparison">
+                    <h2>策略对比</h2>
+                    <p>用于同一支股票、同一时间区间内，多策略横向比较。</p>
+                    <ul>
+                        <li>选择多个策略后运行，对比表会展示收益、回撤、胜率、交易次数等指标。</li>
+                        <li>图表区域会展示权益曲线、收益分布、K线等可视化。</li>
+                        <li>若你修改了参数，系统会重新计算并刷新对比结果。</li>
+                    </ul>
+                </section>
+
+                <section id="details">
+                    <h2>详细分析</h2>
+                    <p>用于深入查看某个策略在当前股票上的信号、交易过程与图表细节。</p>
+                    <ul>
+                        <li>支持在下拉框选择策略，查看该策略的信号列表。</li>
+                        <li>K线图上会叠加买卖点或关键提示信息。</li>
+                        <li>建议在已获取数据后使用，避免空数据导致图表不完整。</li>
+                    </ul>
+                </section>
+
+                <section id="screening">
+                    <h2>股票筛选</h2>
+                    <p>用于在一个股票范围内批量寻找满足策略信号的股票。</p>
+                    <h3>操作流程</h3>
+                    <ul>
+                        <li>选择筛选范围：如 A 股全范围、沪市、深市、创业板、指数成分、自选列表等。</li>
+                        <li>选择筛选策略：可以多选。</li>
+                        <li>可选过滤：智能验证、行业过滤、概念过滤等。</li>
+                        <li>点击开始筛选：结果表支持排序、查看详情、手动加入股池。</li>
+                    </ul>
+                    <div class="note">注意：筛选结果不会自动加入股池，需要勾选后手动加入，避免误入池。</div>
+                </section>
+
+                <section id="pool">
+                    <h2>股票池</h2>
+                    <p>用于集中管理“值得继续跟踪”的股票（来源可能是筛选、手动添加、策略信号等）。</p>
+                    <ul>
+                        <li>支持搜索过滤、批量删除、查看数据量与更新时间。</li>
+                        <li>加入股池时会尽量获取对应日期范围的数据，便于后续计算。</li>
+                        <li>股池会持久化保存，重开依然存在。</li>
+                    </ul>
+                </section>
+
+                <section id="optimization">
+                    <h2>参数优化</h2>
+                    <p>用于对策略参数进行自动化寻优（通常基于历史回测表现）。</p>
+                    <ul>
+                        <li>先准备数据（股票+日期），再运行参数优化。</li>
+                        <li>优化完成后可一键应用优化参数，并保存到本地。</li>
+                        <li>若你只想微调某个参数，可在参数区拖动滑块，系统会自动保存并刷新结果。</li>
+                    </ul>
+                </section>
+
+                <section id="appearance">
+                    <h2>外观主题</h2>
+                    <ul>
+                        <li>左侧“外观”支持亮色/暗色切换，立即生效。</li>
+                        <li>外观会自动保存，下次打开自动恢复。</li>
+                        <li>若你觉得亮色下对比度仍不足，可反馈具体区域（如表格提示、图表浮层），可以继续精细化优化。</li>
+                    </ul>
+                </section>
+
+                <section id="faq">
+                    <h2>常见问题</h2>
+                    <h3>1) 看不到数据/连接失败</h3>
+                    <ul>
+                        <li>确认后端服务已启动，且浏览器能访问 <span class="kbd">http://localhost:5000</span>。</li>
+                        <li>检查终端日志是否有 Token 或网络错误提示。</li>
+                    </ul>
+                    <h3>2) 筛选很慢</h3>
+                    <ul>
+                        <li>全市场筛选计算量大，建议先缩小范围（沪市/深市/创业板/指数成分）。</li>
+                        <li>优先使用缓存区间，避免重复拉取数据。</li>
+                    </ul>
+                    <h3>3) 设置没有保存</h3>
+                    <ul>
+                        <li>系统基于浏览器本地存储保存设置；若使用无痕模式或禁用存储，可能无法持久化。</li>
+                        <li>也可尝试刷新页面后再检查。</li>
+                    </ul>
+                    <div class="note">需要更多帮助：可以回到主页面，或将具体问题截图发出，便于快速定位。</div>
+                    <p><a class="link" href="quant_frontend.html" target="_blank">返回主页面</a></p>
+                </section>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
