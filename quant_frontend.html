@@ -4654,6 +4654,14 @@ TUSHARE_TOKEN=你的token
     <script>
         // ===================== 配置 =====================
         const API_BASE = (() => {
+            // Vercel 部署环境判断
+            const hostname = (typeof location !== 'undefined' ? location.hostname : '').toLowerCase();
+            const isVercel = hostname.endsWith('.vercel.app');
+            
+            if (isVercel) {
+                return '/api';
+            }
+            
             const fallback = 'http://localhost:5000/api';
             try {
                 if (typeof location === 'undefined') return fallback;
