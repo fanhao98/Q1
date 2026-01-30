@@ -1,14 +1,14 @@
 {
-    "builds": [
-        {
-            "src": "quant_server.py",
-            "use": "@vercel/python"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "quant_server.py"
-        }
-    ]
+  "builds": [
+    {
+      "src": "quant_server.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "quant_server.py"
+    }
+  ]
 }

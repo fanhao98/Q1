@@ -182,32 +182,107 @@ def static_files(filename):
     """提供静态文件"""
     return send_from_directory(RESOURCE_DIR, filename)
 
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    return jsonify({
+        'success': True,
+        'token_present': bool(TUSHARE_TOKEN),
+        'token_source': TUSHARE_TOKEN_SOURCE,
+        'pro_initialized': pro is not None,
+        'pro_init_error': _PRO_INIT_ERROR,
+        'data_root': DATA_ROOT
+    })
+
 def _load_tushare_token():
-    env_token = os.getenv('TUSHARE_TOKEN')
-    if env_token:
-        return env_token.strip()
+    candidates = [
+        'TUSHARE_TOKEN',
+        'TS_TOKEN',
+        'TUSHARETOKEN',
+        'TU_SHARE_TOKEN',
+    ]
+    for name in candidates:
+        env_token = os.getenv(name)
+        if env_token and env_token.strip():
+            return env_token.strip(), f'env:{name}'
     token_file = os.path.join(DATA_ROOT, 'tushare_token.txt')
     try:
         if os.path.exists(token_file):
             with open(token_file, 'r', encoding='utf-8') as f:
-                return (f.read() or '').strip()
+                return ((f.read() or '').strip(), f'file:{token_file}')
     except Exception:
-        return ''
-    return ''
+        return '', ''
+    return '', ''
 
 
-TUSHARE_TOKEN = _load_tushare_token()
+TUSHARE_TOKEN = ''
+TUSHARE_TOKEN_SOURCE = ''
+_PRO_INIT_ERROR = ''
+_PRO_INIT_LOCK = threading.Lock()
 
-print("正在初始化Tushare...")
-try:
-    if not TUSHARE_TOKEN:
-        raise RuntimeError("未配置Tushare Token，请设置环境变量TUSHARE_TOKEN或在数据目录放置tushare_token.txt")
-    ts.set_token(TUSHARE_TOKEN)
-    pro = ts.pro_api()
-    print("✓ Tushare初始化成功")
-except Exception as e:
-    print(f"✗ Tushare初始化失败: {e}")
-    pro = None
+
+def _is_writable_dir(path):
+    if not path or not os.path.isdir(path):
+        return False
+    probe = os.path.join(path, '.probe_write')
+    try:
+        with open(probe, 'w', encoding='utf-8') as f:
+            f.write('')
+        os.remove(probe)
+        return True
+    except Exception:
+        return False
+
+
+def _init_tushare_pro():
+    global TUSHARE_TOKEN, TUSHARE_TOKEN_SOURCE, pro, _PRO_INIT_ERROR
+    token, source = _load_tushare_token()
+    TUSHARE_TOKEN = token
+    TUSHARE_TOKEN_SOURCE = source
+
+    print("正在初始化Tushare...")
+    try:
+        if os.environ.get('VERCEL') and os.name != 'nt':
+            fallback_home = DATA_ROOT or '/tmp'
+            try:
+                os.makedirs(fallback_home, exist_ok=True)
+            except Exception:
+                pass
+            current_home = os.environ.get('HOME')
+            if not _is_writable_dir(current_home):
+                os.environ['HOME'] = fallback_home
+            current_userprofile = os.environ.get('USERPROFILE')
+            if not _is_writable_dir(current_userprofile):
+                os.environ['USERPROFILE'] = fallback_home
+            os.environ.setdefault('XDG_CACHE_HOME', fallback_home)
+            os.environ.setdefault('XDG_CONFIG_HOME', fallback_home)
+
+        if not TUSHARE_TOKEN:
+            raise RuntimeError("未配置Tushare Token，请设置环境变量TUSHARE_TOKEN/TS_TOKEN或在数据目录放置tushare_token.txt")
+        try:
+            ts.set_token(TUSHARE_TOKEN)
+        except Exception:
+            pass
+        pro = ts.pro_api(TUSHARE_TOKEN)
+        _PRO_INIT_ERROR = ''
+        print("✓ Tushare初始化成功")
+        return pro
+    except Exception as e:
+        _PRO_INIT_ERROR = str(e)
+        print(f"✗ Tushare初始化失败: {e}")
+        pro = None
+        return None
+
+
+def _get_pro():
+    global pro
+    if pro is not None:
+        return pro
+    with _PRO_INIT_LOCK:
+        if pro is not None:
+            return pro
+        return _init_tushare_pro()
+
+_init_tushare_pro()
 
 
 INDEX_CONSTITUENTS_CACHE_FILE = os.path.join(DATA_ROOT, 'index_constituents_cache.json')
@@ -1626,7 +1701,8 @@ def api_get_stock_list():
                 'cached': True
             })
     
-    if pro is None:
+    pro_client = _get_pro()
+    if pro_client is None:
         default_stocks = [
             {'ts_code': '000001.SZ', 'symbol': '000001', 'name': '平安银行', 'industry': '银行'},
             {'ts_code': '000002.SZ', 'symbol': '000002', 'name': '万科A', 'industry': '房地产'},
@@ -1647,7 +1723,7 @@ def api_get_stock_list():
 
     try:
         # 尝试获取股票列表，不限制数量以获取全量行业信息
-        df = pro.stock_basic(
+        df = pro_client.stock_basic(
             exchange='',
             list_status='L',
             fields='ts_code,symbol,name,industry'
@@ -1698,15 +1774,26 @@ def api_get_concept_list():
         except Exception:
             pass
 
-    if pro is None:
+    pro_client = _get_pro()
+    if pro_client is None:
         return jsonify({'success': True, 'count': 0, 'data': [], 'cached': False, 'message': '未配置Tushare Token，无法拉取概念列表。'})
 
     try:
         df = None
         try:
-            df = pro.concept(src='ts')
+            concept_func = getattr(pro_client, 'concept', None)
+            if callable(concept_func):
+                try:
+                    df = concept_func(src='ts')
+                except Exception:
+                    df = concept_func()
+            else:
+                try:
+                    df = pro_client.query('concept', src='ts')
+                except Exception:
+                    df = pro_client.query('concept')
         except Exception:
-            df = pro.concept()
+            df = pro_client.query('concept')
         if df is None or df.empty:
             return jsonify({'success': True, 'count': 0, 'data': [], 'cached': False})
 
@@ -1724,7 +1811,11 @@ def api_get_concept_list():
         return jsonify({'success': True, 'count': len(normalized), 'data': normalized, 'cached': False})
     except Exception as e:
         print(f"获取概念列表错误: {e}")
-        return jsonify({'success': True, 'count': 0, 'data': [], 'cached': False, 'message': '概念列表获取失败'})
+        debug = (request.args.get('debug') or '').strip() == '1'
+        payload = {'success': True, 'count': 0, 'data': [], 'cached': False, 'message': '概念列表获取失败'}
+        if debug:
+            payload['error'] = str(e)
+        return jsonify(payload)
 
 
 @app.route('/api/concept_members', methods=['GET'])
@@ -1734,7 +1825,8 @@ def api_get_concept_members():
     if not codes:
         return jsonify({'success': False, 'message': 'codes 不能为空', 'ts_codes': [], 'count': 0}), 400
 
-    if pro is None:
+    pro_client = _get_pro()
+    if pro_client is None:
         return jsonify({'success': True, 'message': '未配置Tushare Token，无法拉取概念成分股。', 'ts_codes': [], 'count': 0, 'cached': False})
 
     all_ts_codes = set()
@@ -1760,9 +1852,19 @@ def api_get_concept_members():
         try:
             df = None
             try:
-                df = pro.concept_detail(id=concept_code)
+                detail_func = getattr(pro_client, 'concept_detail', None)
+                if callable(detail_func):
+                    try:
+                        df = detail_func(id=concept_code)
+                    except Exception:
+                        df = detail_func(concept_id=concept_code)
+                else:
+                    try:
+                        df = pro_client.query('concept_detail', id=concept_code)
+                    except Exception:
+                        df = pro_client.query('concept_detail', concept_id=concept_code)
             except Exception:
-                df = pro.concept_detail(concept_id=concept_code)
+                df = pro_client.query('concept_detail', id=concept_code)
             if df is None or df.empty:
                 by_code[concept_code] = []
                 continue
