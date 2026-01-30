@@ -9530,11 +9530,18 @@ TUSHARE_TOKEN=你的token
                 });
             }
 
+            const isLightTheme = (document.documentElement.getAttribute('data-theme') || '').toLowerCase() === 'light';
+            const rootStyles = getComputedStyle(document.documentElement);
+            const chipTextColor = rootStyles.getPropertyValue('--text').trim() || (isLightTheme ? '#0f172a' : '#eee');
+            const chipTextMutedColor = rootStyles.getPropertyValue('--text-muted').trim() || (isLightTheme ? '#334155' : '#ccc');
+            const chipTextFaintColor = rootStyles.getPropertyValue('--text-faint').trim() || (isLightTheme ? '#64748b' : '#aaa');
+            const chipTextStroke = isLightTheme ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)';
+
             const option = {
                 backgroundColor: 'transparent',
                 legend: {
                     data: legendData,
-                    textStyle: { color: '#ccc' },
+                    textStyle: { color: chipTextMutedColor },
                     type: 'scroll',
                     orient: 'horizontal',
                     top: 5,
@@ -9545,7 +9552,7 @@ TUSHARE_TOKEN=你的token
                     itemHeight: 10,
                     pageIconSize: 10,
                     pageButtonItemGap: 4,
-                    pageTextStyle: { color: '#aaa' }
+                    pageTextStyle: { color: chipTextFaintColor }
                 },
                 grid: {
                     left: 0,
@@ -9595,10 +9602,12 @@ TUSHARE_TOKEN=你的token
                                         `70%筹码集中度: ${c70.ratio}%`
                                     ].join('\n'),
                                     font: '12px "Microsoft YaHei", sans-serif',
-                                    fill: '#eee',
+                                    fill: chipTextColor,
+                                    stroke: chipTextStroke,
+                                    lineWidth: 3,
                                     lineHeight: 20,
-                                    shadowBlur: 3,
-                                    shadowColor: 'rgba(0,0,0,0.8)'
+                                    shadowBlur: 1,
+                                    shadowColor: isLightTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.8)'
                                 }
                             }
                         ]
