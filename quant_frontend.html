@@ -4510,8 +4510,14 @@ TUSHARE_TOKEN=你的token
                     
                     <div class="btn-group">
                         <button class="btn btn-primary" id="btnRunOptimization" onclick="runOptimization()">🚀 运行全策略全参数优化</button>
+                        <button class="btn btn-warning" id="btnAutoOptimize" onclick="console.log('按钮被点击'); runAutoBatchOptimization();">🤖 自动批量参数优化</button>
                         <button class="btn btn-success" onclick="applyAllOptimizedParams()">✅ 应用优化参数</button>
                         <button class="btn btn-info" onclick="exportOptimizationResults()">📊 导出优化结果</button>
+                    </div>
+                    <div style="margin-top:10px;padding:10px;background:rgba(102,126,234,0.1);border-radius:6px;font-size:13px;color:#888;">
+                        <div>💡 <strong>两种优化方式：</strong></div>
+                        <div>• <strong>全策略全参数优化</strong>：针对当前选中的股票，优化所有策略参数</div>
+                        <div>• <strong>自动批量参数优化</strong>：自动选择30个行业的代表性股票（约50只），建立完整的跨行业参数体系（推荐首次使用）</div>
                     </div>
                 </div>
 
@@ -10539,6 +10545,157 @@ TUSHARE_TOKEN=你的token
             }
             
             runRealOptimization();
+        }
+
+        // ===================== 自动批量参数优化 =====================
+        window.runAutoBatchOptimization = async function() {
+            const btnAuto = document.getElementById('btnAutoOptimize');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressLabel = document.getElementById('progressLabel');
+            const progressDetails = document.getElementById('progressDetails');
+            
+            if (btnAuto) {
+                btnAuto.disabled = true;
+                btnAuto.textContent = '⏳ 自动优化运行中...';
+            }
+            
+            progressContainer.classList.add('active');
+            progressLabel.textContent = '准备自动批量参数优化...';
+            progressFill.style.width = '0%';
+            progressPercent.textContent = '0%';
+            
+            progressDetails.innerHTML = `
+                        <div style="color:#667eea">🤖 自动批量参数优化</div>
+                        <div>将自动选择8个代表性行业的股票（涵盖低/中/高波动率）</div>
+                        <div>为8个策略各测试294组参数组合，寻找最优参数</div>
+                        <div style="margin-top:10px;color:#ff6b6b;font-weight:bold">预计需要10-15分钟，请耐心等待...</div>
+                    `;
+            
+            try {
+                const startDate = document.getElementById('startDate')?.value || '2022-01-01';
+                const endDate = document.getElementById('endDate')?.value || new Date().toISOString().split('T')[0];
+                
+                // 获取选中的策略
+                let selectedStrategies = Array.from(document.querySelectorAll('.strategy-card.active'))
+                    .map(card => card.dataset.strategy);
+                
+                if (selectedStrategies.length === 0) {
+                    selectedStrategies = ['deep_fusion']; // 默认至少选一个
+                }
+                
+                progressLabel.textContent = '正在连接服务器...';
+                
+                let progressInterval = null;
+                
+                // 轮询进度函数
+                async function pollProgress() {
+                    try {
+                        const progressRes = await fetch('/api/auto_optimize_progress');
+                        if (progressRes.ok) {
+                            const progressData = await progressRes.json();
+                            if (progressData.success && progressData.is_running) {
+                                const percent = progressData.progress_percent;
+                                progressFill.style.width = percent + '%';
+                                progressPercent.textContent = percent + '%';
+                                progressLabel.textContent = `正在优化: ${progressData.current_stock} (${progressData.current}/${progressData.total})`;
+                            }
+                        }
+                    } catch (e) {
+                        console.log('进度查询失败:', e);
+                    }
+                }
+                
+                let response;
+                try {
+                    console.log('准备发送请求到 /api/auto_optimize_params');
+                    
+                    // 启动进度轮询（每2秒查询一次）
+                    progressInterval = setInterval(pollProgress, 2000);
+                    
+                    response = await fetch('/api/auto_optimize_params', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            start_date: startDate,
+                            end_date: endDate,
+                            strategies: selectedStrategies
+                        })
+                    });
+                } catch (networkError) {
+                    console.error('网络请求失败:', networkError);
+                    throw new Error(`无法连接到服务器，请确保服务器已启动 (http://127.0.0.1:5000)。错误: ${networkError.message}`);
+                } finally {
+                    // 停止进度轮询
+                    if (progressInterval) {
+                        clearInterval(progressInterval);
+                    }
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => '未知错误');
+                    console.error('服务器响应错误:', response.status, errorText);
+                    throw new Error(`服务器响应错误: ${response.status} - ${errorText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    progressFill.style.width = '100%';
+                    progressPercent.textContent = '100%';
+                    progressLabel.textContent = '自动批量参数优化完成！';
+                    
+                    // 显示优化结果摘要
+                    const industries = result.industries || [];
+                    const stocks = result.optimized_stocks || [];
+                    
+                    // 将自动批量优化结果保存到 optimizationResults
+                    if (result.strategy_params) {
+                        Object.assign(optimizationResults, result.strategy_params);
+                        console.log('自动批量优化结果已保存:', optimizationResults);
+                    }
+                    
+                    progressDetails.innerHTML = `
+                        <div style="color:#38ef7d">✅ 自动批量参数优化完成！</div>
+                        <div style="margin-top:10px;">
+                            <div>📊 优化股票数量: ${stocks.length} 只</div>
+                            <div>🏭 覆盖行业数量: ${industries.length} 个</div>
+                            <div style="margin-top:8px;color:#888">已建立完整的跨行业参数体系</div>
+                        </div>
+                        <div style="margin-top:10px;padding:8px;background:rgba(102,126,234,0.1);border-radius:4px;">
+                            <div style="font-size:12px;color:#667eea">覆盖行业:</div>
+                            <div style="font-size:11px;color:#888;margin-top:4px;">${industries.join('、')}</div>
+                        </div>
+                        <div style="margin-top:10px;color:#ff6b6b;font-weight:bold;">
+                            ⚠️ 请点击"应用优化参数"按钮使优化结果生效
+                        </div>
+                    `;
+                    
+                    showNotification(`✅ 自动批量参数优化完成！已优化${stocks.length}只股票，请点击"应用优化参数"`, 'success');
+                    
+                    // 自动切换到优化结果页面
+                    setTimeout(() => {
+                        switchTab('optimization');
+                        // 显示提示让用户应用参数
+                        showNotification('💡 请点击"应用优化参数"使优化结果生效', 'info');
+                    }, 1000);
+                    
+                } else {
+                    throw new Error(result.message || '优化失败');
+                }
+                
+            } catch (error) {
+                console.error('自动批量参数优化失败:', error);
+                progressContainer.classList.remove('active');
+                showNotification('❌ 自动批量参数优化失败: ' + error.message, 'error');
+                
+            } finally {
+                if (btnAuto) {
+                    btnAuto.disabled = false;
+                    btnAuto.textContent = '🤖 自动批量参数优化';
+                }
+            }
         }
 
         function simulateOptimization(strategy, takeProfit, stopLoss, volumeMulti) {

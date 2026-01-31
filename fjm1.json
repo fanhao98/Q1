@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "savedAt": "2026-01-31T14:12:26.724Z",
+  "values": {
+    "quant_ui_state_v1": {
+      "theme": "dark",
+      "activeTab": "details",
+      "stockCode": "000858.SZ",
+      "stockName": "太极实业",
+      "initCapital": "100",
+      "startDate": "2025-01-27",
+      "endDate": "2026-01-30",
+      "paramStrategy": "deep_fusion",
+      "detailStrategy": "oversold_rebound",
+      "comparisonStrategies": [
+        "deep_fusion",
+        "volume_breakout",
+        "oversold_rebound",
+        "trend_enhanced",
+        "macd_divergence",
+        "bollinger_extreme",
+        "momentum_rotation",
+        "turtle_enhanced"
+      ],
+      "screeningStrategies": [],
+      "screeningScope": "hot",
+      "signalPeriod": "3",
+      "customStockInput": "",
+      "enableSmartVerification": false,
+      "smartMinScore": "0",
+      "smartMinReturn": "0",
+      "smartMinWinRate": "0",
+      "smartMinTrades": "0",
+      "smartRankBy": "score",
+      "enableIndustryFilter": false,
+      "enableConceptFilter": false,
+      "screeningConcept": "",
+      "selectedIndustries": [],
+      "poolFilter": "",
+      "optEnableTakeProfit": true,
+      "optEnableStopLoss": true,
+      "optEnableVolumeMulti": true,
+      "optEnableDynamicTpCallback": false
+    },
+    "quant_kline_zoom_state_v1": {
+      "start": 59.27843092461566,
+      "end": 100
+    },
+    "quant_stock_pool": [],
+    "quant_last_session": {
+      "tsCode": "000858.SZ",
+      "startDate": "2025-01-27",
+      "endDate": "2026-01-30",
+      "savedAt": "2026-01-31T13:56:16.381Z"
+    },
+    "strategyConfig": {
+      "takeProfit": 0.15,
+      "stopLoss": 0.08,
+      "volumeMulti": 1.5,
+      "buyCooldown": 2,
+      "useMa5Sell": true,
+      "useDynamicTP": true,
+      "useAdaptPosition": true,
+      "useStopLoss": true,
+      "useTakeProfit": true,
+      "useMacdDeathCross": true,
+      "useRsiOverbought": true,
+      "useHoldTimeout": true,
+      "holdTimeoutDays": 30,
+      "useMa5AboveMa20": true,
+      "usePriceAboveMa5": true,
+      "useMacdRising": true,
+      "useRsiBelow35": true,
+      "useRsiBelow25": true,
+      "useVolumeAboveMa": true,
+      "usePriceBelowBoll": true,
+      "useNearLow": true,
+      "useVolumeUp": true,
+      "useRsiOversold": true,
+      "useBullishCandle": true,
+      "useGoldenCross": true,
+      "useMacdPositive": true,
+      "useBreakHigh": true,
+      "useVolumeConfirm": true,
+      "useTouchLowerBoll": true,
+      "useMomentumFactor": true,
+      "useValueFactor": true,
+      "useQualityFactor": true,
+      "strategySpecificConfig": {
+        "deep_fusion": {
+          "dynamicTpCallback": 0.105,
+          "stopLoss": 0.03,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.5,
+          "dynamicTpVariation": 0.1
+        },
+        "volume_breakout": {
+          "dynamicTpCallback": 0.04,
+          "dynamicTpThreshold": 0.1,
+          "dynamicTpVariation": 0.05,
+          "stopLoss": 0.03,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 2
+        },
+        "oversold_rebound": {
+          "dynamicTpCallback": 0.01,
+          "stopLoss": 0.08,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.2
+        },
+        "trend_enhanced": {
+          "dynamicTpCallback": 0.04,
+          "dynamicTpThreshold": 0.1,
+          "dynamicTpVariation": 0.05,
+          "stopLoss": 0.03,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.2
+        },
+        "macd_divergence": {
+          "dynamicTpCallback": 0.02,
+          "stopLoss": 0.05,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.2
+        },
+        "bollinger_extreme": {
+          "dynamicTpCallback": 0.01,
+          "stopLoss": 0.12,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.2
+        },
+        "momentum_rotation": {
+          "dynamicTpCallback": 0.05,
+          "stopLoss": 0.03,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.5
+        },
+        "turtle_enhanced": {
+          "dynamicTpCallback": 0.01,
+          "stopLoss": 0.03,
+          "takeProfit": 0.08,
+          "useMa5Sell": false,
+          "useRsiOverbought": false,
+          "volumeMulti": 1.5
+        }
+      }
+    }
+  }
+}
