@@ -7,7 +7,7 @@ Tushare量化交易系统后端
 import tushare as ts
 import pandas as pd
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import json

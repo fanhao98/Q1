@@ -1,9 +1,9 @@
 {
   "quant_ui_state_v1": {
     "theme": "dark",
-    "activeTab": "pool",
-    "stockCode": "300548.SZ",
-    "stockName": "长芯博创",
+    "activeTab": "details",
+    "stockCode": "300394.SZ",
+    "stockName": "天孚通信",
     "initCapital": "100",
     "startDate": "2024-01-27",
     "endDate": "2026-01-30",
