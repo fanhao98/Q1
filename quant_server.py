@@ -3844,6 +3844,71 @@ def api_auto_optimize_progress():
     })
 
 
+# 配置文件路径
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+CONFIG_FILE = os.path.join(CONFIG_DIR, 'user_config.json')
+
+def ensure_config_dir():
+    """确保配置目录存在"""
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+
+@app.route('/api/config', methods=['GET'])
+def api_get_config():
+    """从文件加载用户配置"""
+    try:
+        ensure_config_dir()
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            return jsonify({'success': True, 'config': config})
+        else:
+            return jsonify({'success': True, 'config': {}})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/config', methods=['POST'])
+def api_save_config():
+    """保存用户配置到文件"""
+    try:
+        ensure_config_dir()
+        config = request.get_json(silent=True) or {}
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return jsonify({'success': True, 'message': '配置已保存'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/config/export', methods=['GET'])
+def api_export_config():
+    """导出配置文件"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            return send_file(CONFIG_FILE, as_attachment=True, download_name='quant_config_backup.json')
+        else:
+            return jsonify({'success': False, 'message': '配置文件不存在'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/config/import', methods=['POST'])
+def api_import_config():
+    """导入配置文件"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': '未上传文件'})
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'message': '文件名为空'})
+        
+        config = json.load(file)
+        ensure_config_dir()
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return jsonify({'success': True, 'message': '配置已导入'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
 if __name__ == '__main__':
     print("="*50)
     print("Tushare量化交易系统后端启动")

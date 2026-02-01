@@ -2886,14 +2886,14 @@ TUSHARE_TOKEN=你的token
                     <button class="btn btn-secondary" onclick="clearAllCache()" title="清除所有缓存数据">
                         🗑️ 清除缓存
                     </button>
-                    <button class="btn btn-secondary" onclick="exportSettingsBundle()" title="导出所有界面设置与股票池，跨浏览器/电脑迁移">
-                        ⬆️ 导出设置
+                    <button class="btn btn-secondary" onclick="exportConfigToFile()" title="导出配置文件到项目目录，可跨电脑使用">
+                        💾 导出设置
                     </button>
-                    <button class="btn btn-secondary" onclick="promptImportSettingsBundle()" title="导入设置文件，恢复所有界面设置与股票池">
-                        ⬇️ 导入设置
+                    <button class="btn btn-secondary" onclick="document.getElementById('importConfigFile').click()" title="从配置文件导入，恢复所有设置">
+                        📂 导入设置
                     </button>
                 </div>
-                <input type="file" id="importSettingsFile" accept="application/json" style="display:none" onchange="handleImportSettingsFile(this.files && this.files[0]); this.value='';">
+                <input type="file" id="importConfigFile" accept="application/json" style="display:none" onchange="if(this.files && this.files[0]) importConfigFromFile(this.files[0]).then(r => r && showNotification('配置导入成功，页面将刷新', 'success')); this.value='';">
             </div>
         </div>
 
@@ -4724,6 +4724,85 @@ TUSHARE_TOKEN=你的token
             endDate: ''
         };
 
+        // 文件存储配置 - 优先使用文件存储，失败时回退到localStorage
+        let fileConfigCache = null;
+        let useFileStorage = true;
+
+        // 从文件加载配置
+        async function loadConfigFromFile() {
+            try {
+                const response = await fetch(`${API_BASE}/config`);
+                const result = await response.json();
+                if (result.success && result.config) {
+                    fileConfigCache = result.config;
+                    // 同步到localStorage作为备份
+                    Object.keys(result.config).forEach(key => {
+                        localStorage.setItem(key, JSON.stringify(result.config[key]));
+                    });
+                    return result.config;
+                }
+            } catch (e) {
+                console.warn('从文件加载配置失败，使用localStorage:', e);
+                useFileStorage = false;
+            }
+            return null;
+        }
+
+        // 保存配置到文件
+        async function saveConfigToFile(config) {
+            if (!useFileStorage) return false;
+            try {
+                const response = await fetch(`${API_BASE}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    fileConfigCache = config;
+                    return true;
+                }
+            } catch (e) {
+                console.warn('保存配置到文件失败:', e);
+                useFileStorage = false;
+            }
+            return false;
+        }
+
+        // 导出配置到文件下载
+        async function exportConfigToFile() {
+            try {
+                window.open(`${API_BASE}/config/export`, '_blank');
+                return true;
+            } catch (e) {
+                console.error('导出配置失败:', e);
+                return false;
+            }
+        }
+
+        // 导入配置文件
+        async function importConfigFromFile(file) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const response = await fetch(`${API_BASE}/config/import`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.success) {
+                    // 重新加载配置
+                    await loadConfigFromFile();
+                    // 刷新页面应用新配置
+                    window.location.reload();
+                    return true;
+                }
+            } catch (e) {
+                console.error('导入配置失败:', e);
+            }
+            return false;
+        }
+
         async function fetchLocalStateKey(key) {
             if (!key) return null;
             try {
@@ -4831,6 +4910,31 @@ TUSHARE_TOKEN=你的token
         async function hydrateAndRestoreAll(options = {}) {
             if (localStateHydrateInProgress) return;
             localStateHydrateInProgress = true;
+            
+            // 优先从文件加载配置
+            try {
+                const fileConfig = await loadConfigFromFile();
+                if (fileConfig) {
+                    // 从文件恢复数据到localStorage
+                    if (fileConfig[UI_STATE_KEY]) {
+                        localStorage.setItem(UI_STATE_KEY, JSON.stringify(fileConfig[UI_STATE_KEY]));
+                    }
+                    if (fileConfig.optimizationResults) {
+                        Object.assign(optimizationResults, fileConfig.optimizationResults);
+                        localStorage.setItem('optimizationResults', JSON.stringify(fileConfig.optimizationResults));
+                    }
+                    if (fileConfig.strategyConfig) {
+                        localStorage.setItem('strategyConfig', JSON.stringify(fileConfig.strategyConfig));
+                    }
+                    if (fileConfig.stockPool) {
+                        localStorage.setItem(STOCK_POOL_KEY, JSON.stringify(fileConfig.stockPool));
+                    }
+                    console.log('已从文件加载配置');
+                }
+            } catch (e) {
+                console.warn('从文件加载配置失败:', e);
+            }
+            
             try {
                 await hydrateLocalStorageFromBackend(options);
             } finally {
@@ -5176,6 +5280,17 @@ TUSHARE_TOKEN=你的token
                 pendingUiState = state;
                 localStorage.setItem(UI_STATE_KEY, JSON.stringify(state));
                 persistLocalStateKeyBestEffort(UI_STATE_KEY, state);
+                
+                // 同时保存到文件
+                if (useFileStorage) {
+                    const fileConfig = {
+                        [UI_STATE_KEY]: state,
+                        optimizationResults: optimizationResults,
+                        strategyConfig: {...currentConfig, strategySpecificConfig: strategySpecificConfig},
+                        stockPool: Array.from(stockPool.values())
+                    };
+                    saveConfigToFile(fileConfig).catch(e => console.warn('文件保存失败:', e));
+                }
             } catch (e) {
                 console.warn('保存设置失败:', e);
             }
