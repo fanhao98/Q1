@@ -5034,7 +5034,7 @@ TUSHARE_TOKEN=你的token
                 'screeningScope', 'signalPeriod', 'customStockInput',
                 'enableSmartVerification', 'enableIndustryFilter', 'enableConceptFilter',
                 'smartMinScore', 'smartMinReturn', 'smartMinWinRate', 'smartMinTrades', 'smartRankBy',
-                'screeningConcept', 'poolFilter', 'themeSelect',
+                'screeningIndustry', 'screeningConcept', 'poolFilter', 'themeSelect',
                 'optEnableTakeProfit', 'optEnableStopLoss', 'optEnableVolumeMulti', 'optEnableDynamicTpCallback'
             ]);
 
@@ -5162,6 +5162,7 @@ TUSHARE_TOKEN=你的token
                     smartRankBy: document.getElementById('smartRankBy')?.value ?? '',
                     enableIndustryFilter: !!document.getElementById('enableIndustryFilter')?.checked,
                     enableConceptFilter: !!document.getElementById('enableConceptFilter')?.checked,
+                    screeningIndustry: document.getElementById('screeningIndustry')?.value || '',
                     screeningConcept: document.getElementById('screeningConcept')?.value || '',
                     selectedIndustries: getSelectedIndustries(),
                     poolFilter: document.getElementById('poolFilter')?.value || '',
@@ -5290,6 +5291,18 @@ TUSHARE_TOKEN=你的token
             if (conceptEl && state.enableConceptFilter !== undefined) {
                 conceptEl.checked = !!state.enableConceptFilter;
                 if (typeof toggleConceptFilter === 'function') toggleConceptFilter();
+            }
+
+            const industryInputEl = document.getElementById('screeningIndustry');
+            if (industryInputEl && state.screeningIndustry !== undefined) industryInputEl.value = state.screeningIndustry;
+            try {
+                const rawInd = (state.screeningIndustry || '').trim();
+                const indTokens = rawInd ? rawInd.split(/[,，\s]+/).filter(Boolean).map(s => s.toLowerCase()) : [];
+                document.querySelectorAll('#industryDropdown input[type="checkbox"]').forEach(cb => {
+                    cb.checked = indTokens.includes(String(cb.value || '').toLowerCase());
+                });
+                if (typeof updateIndustryTriggerText === 'function') updateIndustryTriggerText();
+            } catch (e) {
             }
 
             const conceptInputEl = document.getElementById('screeningConcept');
