@@ -4841,11 +4841,13 @@ TUSHARE_TOKEN=你的token
             try { restoreStockPool(); } catch (e) {}
 
             try {
+                // 无论当前在哪个标签页，都恢复筛选条件
+                const latest = loadUiStateFromStorage() || pendingUiState;
+                applyUiStateToScreening(latest);
+                
                 const active = getActiveTabName();
                 if (active === 'screening') {
                     await Promise.resolve(initScreeningPage());
-                    const latest = loadUiStateFromStorage() || pendingUiState;
-                    applyUiStateToScreening(latest);
                     if (uiStateRestoring) uiStateRestoring = false;
                 }
             } catch (e) {
@@ -10676,6 +10678,15 @@ TUSHARE_TOKEN=你的token
                     if (result.strategy_params) {
                         Object.assign(optimizationResults, result.strategy_params);
                         console.log('自动批量优化结果已保存:', optimizationResults);
+                        
+                        // 持久化到 localStorage
+                        try {
+                            localStorage.setItem('optimizationResults', JSON.stringify(optimizationResults));
+                            persistLocalStateKeyBestEffort('optimizationResults', optimizationResults);
+                            console.log('优化结果已持久化到本地存储');
+                        } catch (e) {
+                            console.warn('优化结果持久化失败:', e);
+                        }
                     }
                     
                     progressDetails.innerHTML = `
