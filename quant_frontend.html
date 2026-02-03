@@ -1618,6 +1618,34 @@ body {
     font-size: var(--font-size-lg);
 }
 
+/* K线周期选择器样式 */
+.kline-period-selector {
+    display: flex;
+    gap: 5px;
+}
+
+.kline-period-selector .period-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kline-period-selector .period-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.kline-period-selector .period-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
 html[data-theme="dark"] .panel {
     box-shadow: 0 12px 30px rgba(0,0,0,0.35) !important;
 }
@@ -3039,7 +3067,14 @@ TUSHARE_TOKEN=你的token
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">📈 K线图与买卖点</div>
+                    <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>📈 K线图与买卖点</span>
+                        <div class="kline-period-selector" style="display: flex; gap: 5px;">
+                            <button type="button" class="period-btn active" data-period="D" onclick="switchKlinePeriod('D')">日线</button>
+                            <button type="button" class="period-btn" data-period="W" onclick="switchKlinePeriod('W')">周线</button>
+                            <button type="button" class="period-btn" data-period="M" onclick="switchKlinePeriod('M')">月线</button>
+                        </div>
+                    </div>
                     <div class="kline-wrapper" style="display: flex; height: 580px; width: 100%; position: relative;">
                         <div id="kline-header-info" style="position: absolute; top: 0px; left: 10px; right: 20%; z-index: 100; pointer-events: none; font-size: 14px; line-height: 1.2; color: #ccc;"></div>
                         <div id="klineChart" style="width: 80%; height: 100%;"></div>
@@ -4724,6 +4759,9 @@ TUSHARE_TOKEN=你的token
             endDate: ''
         };
 
+        // K线周期设置: D=日线, W=周线, M=月线
+        let currentKlinePeriod = localStorage.getItem('quant_kline_period') || 'D';
+
         // 文件存储配置 - 优先使用文件存储，失败时回退到localStorage
         let fileConfigCache = null;
         let useFileStorage = true;
@@ -5064,6 +5102,10 @@ TUSHARE_TOKEN=你的token
             updateTime();
             setInterval(updateTime, 1000);
             setDefaultDates();
+            
+            // 初始化K线周期选择器
+            initKlinePeriodSelector();
+            
             appHydrationPromise = hydrateAndRestoreAll().finally(() => {
                 checkConnection();
                 updatePoolStatus();
@@ -5075,6 +5117,23 @@ TUSHARE_TOKEN=你的token
             
             // 图表初始化将在ECharts加载完成后自动触发
         });
+        
+        // 初始化K线周期选择器状态
+        function initKlinePeriodSelector() {
+            // 从localStorage读取保存的周期
+            const savedPeriod = localStorage.getItem('quant_kline_period') || 'D';
+            currentKlinePeriod = savedPeriod;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.kline-period-selector .period-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.period === savedPeriod) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            console.log(`📊 K线周期初始化: ${savedPeriod === 'D' ? '日线' : savedPeriod === 'W' ? '周线' : '月线'}`);
+        }
 
         function loadStrategyConfig() {
             try {
@@ -6141,8 +6200,8 @@ TUSHARE_TOKEN=你的token
             currentStockInfo = { tsCode, startDate, endDate };
             
             try {
-                // 1. 首先尝试从缓存加载数据
-                const cachedData = loadStockDataFromCache(tsCode, startDate, endDate);
+                // 1. 首先尝试从缓存加载数据（使用当前选择的周期）
+                const cachedData = loadStockDataFromCache(tsCode, startDate, endDate, currentKlinePeriod);
                 if (cachedData) {
                     loadingText.textContent = '从缓存加载数据...';
                     document.getElementById('loadingProgress').style.width = '50%';
@@ -6200,7 +6259,7 @@ TUSHARE_TOKEN=你的token
                         const incStart = addDaysToDateString(baseEnd, 1);
                         if (incStart && incStart <= endDate) {
                             const incResponse = await fetch(
-                                `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${incStart}&end_date=${endDate}`
+                                `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${incStart}&end_date=${endDate}&freq=${currentKlinePeriod}`
                             );
                             const incResult = await incResponse.json();
                             if (incResult.success && incResult.data && incResult.data.length > 0) {
@@ -6228,13 +6287,13 @@ TUSHARE_TOKEN=你的token
                     }
 
                     const response = await fetch(
-                        `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${startDate}&end_date=${endDate}`
+                        `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${startDate}&end_date=${endDate}&freq=${currentKlinePeriod}`
                     );
                     const result = await response.json();
                     
                     if (result.success) {
                         stockData = prepareStockData(result.data);
-                        console.log(`📊 从API获取到 ${stockData.length} 条数据`);
+                        console.log(`📊 从API获取到 ${stockData.length} 条${result.freq_name || '日线'}数据`);
                         updateDataInfo();
 
                         addToStockPool({
@@ -6246,8 +6305,8 @@ TUSHARE_TOKEN=你的token
                             source: 'api'
                         });
                         
-                        // 保存到缓存
-                        saveStockDataToCache(tsCode, startDate, endDate, stockData);
+                        // 保存到缓存（包含周期信息）
+                        saveStockDataToCache(tsCode, startDate, endDate, stockData, currentKlinePeriod);
                         cleanupShorterCacheRanges(tsCode, startDate, endDate);
                         
                         // 保存当前会话信息
@@ -6322,7 +6381,7 @@ TUSHARE_TOKEN=你的token
                         const incStart = addDaysToDateString(baseEnd, 1);
                         if (incStart && incStart <= endDate) {
                             const incResponse = await fetch(
-                                `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${incStart}&end_date=${endDate}`,
+                                `${API_BASE}/stock_data?ts_code=${tsCode}&start_date=${incStart}&end_date=${endDate}&freq=${currentKlinePeriod}`,
                                 abortSignal ? { signal: abortSignal } : undefined
                             );
                             const incResult = await incResponse.json();
@@ -6368,9 +6427,9 @@ TUSHARE_TOKEN=你的token
 
         // ===================== 数据持久化功能 =====================
         
-        function saveStockDataToCache(tsCode, startDate, endDate, data) {
+        function saveStockDataToCache(tsCode, startDate, endDate, data, freq = 'D') {
             try {
-                const cacheKey = `${tsCode}_${startDate}_${endDate}`;
+                const cacheKey = `${tsCode}_${startDate}_${endDate}_${freq}`;
                 const compactData = compactStockDataForCache(data);
                 const cacheData = {
                     data: compactData,
@@ -6378,6 +6437,7 @@ TUSHARE_TOKEN=你的token
                         tsCode: tsCode,
                         startDate: startDate,
                         endDate: endDate,
+                        freq: freq,
                         cachedAt: new Date().toISOString(),
                         dataCount: data.length
                     }
@@ -6414,9 +6474,9 @@ TUSHARE_TOKEN=你的token
             }
         }
         
-        function loadStockDataFromCache(tsCode, startDate, endDate) {
+        function loadStockDataFromCache(tsCode, startDate, endDate, freq = 'D') {
             try {
-                const cacheKey = `${tsCode}_${startDate}_${endDate}`;
+                const cacheKey = `${tsCode}_${startDate}_${endDate}_${freq}`;
                 const cache = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || '{}');
                 
                 if (cache[cacheKey]) {
@@ -9024,6 +9084,64 @@ TUSHARE_TOKEN=你的token
             
             document.getElementById('detailTradeCount').textContent = result.tradeCount;
             document.getElementById('detailTradeCount').className = 'value neutral';
+        }
+
+        // 切换K线周期
+        async function switchKlinePeriod(period) {
+            if (period === currentKlinePeriod) return;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.kline-period-selector .period-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.period === period) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // 保存周期设置
+            currentKlinePeriod = period;
+            localStorage.setItem('quant_kline_period', period);
+            
+            // 如果有当前股票，重新加载数据
+            if (currentStockInfo.tsCode) {
+                console.log(`🔄 切换至${period === 'D' ? '日线' : period === 'W' ? '周线' : '月线'}，重新加载数据...`);
+                await loadStockDataWithPeriod(currentStockInfo.tsCode, currentStockInfo.startDate, currentStockInfo.endDate, period);
+            }
+        }
+
+        // 根据周期加载股票数据
+        async function loadStockDataWithPeriod(tsCode, startDate, endDate, period) {
+            const periodNames = { 'D': '日线', 'W': '周线', 'M': '月线' };
+            showLoading(`正在加载${periodNames[period]}数据...`);
+            
+            try {
+                const response = await fetch(
+                    `${API_BASE}/stock_data?ts_code=${encodeURIComponent(tsCode)}&start_date=${startDate}&end_date=${endDate}&freq=${period}`
+                );
+                const result = await response.json();
+                
+                if (result.success && result.data && result.data.length > 0) {
+                    stockData = prepareStockData(result.data);
+                    
+                    // 更新当前股票信息
+                    currentStockInfo = { tsCode, startDate, endDate };
+                    
+                    // 更新显示
+                    updateDetailStats();
+                    updateKlineChart();
+                    updateTradeTable();
+                    updateReturnCurve();
+                    
+                    showNotification(`✅ 已切换至${periodNames[period]}`, 'success');
+                } else {
+                    showNotification(`❌ 无法获取${periodNames[period]}数据`, 'error');
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                showNotification('❌ 数据加载失败', 'error');
+            } finally {
+                hideLoading();
+            }
         }
 
         function updateKlineChart() {

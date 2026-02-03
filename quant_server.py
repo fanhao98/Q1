@@ -414,9 +414,18 @@ class CacheManager:
             except Exception as e:
                 print(f"创建数据目录失败: {e}")
     
-    def get_stock_data(self, ts_code, start_date, end_date):
-        """获取股票数据（优先读取本地CSV，支持增量更新）"""
-        file_path = os.path.join(self.data_dir, f"{ts_code}.csv")
+    def get_stock_data(self, ts_code, start_date, end_date, freq='D'):
+        """获取股票数据（优先读取本地CSV，支持增量更新）
+        
+        Args:
+            ts_code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            freq: 周期，'D'=日线, 'W'=周线, 'M'=月线
+        """
+        # 不同周期使用不同的缓存文件
+        freq_suffix = '' if freq == 'D' else f'_{freq}'
+        file_path = os.path.join(self.data_dir, f"{ts_code}{freq_suffix}.csv")
         local_df = None
         
         # 1. 尝试读取本地文件
@@ -443,8 +452,8 @@ class CacheManager:
             if start_date < local_min:
                 pre_end_date = (datetime.strptime(local_min, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                 if start_date <= pre_end_date:
-                    print(f"[向前补充] {ts_code}: {start_date} ~ {pre_end_date}")
-                    pre_data = TushareDataFetcher.get_stock_data(ts_code, start_date, pre_end_date)
+                    print(f"[向前补充] {ts_code} {freq}: {start_date} ~ {pre_end_date}")
+                    pre_data = TushareDataFetcher.get_stock_data(ts_code, start_date, pre_end_date, freq)
                     if pre_data:
                         pre_df = pd.DataFrame(pre_data)
                         local_df = pd.concat([pre_df, local_df]).drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
@@ -454,8 +463,8 @@ class CacheManager:
             if end_date > local_max:
                 inc_start_date = (datetime.strptime(local_max, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 if inc_start_date <= end_date:
-                    print(f"[增量更新] {ts_code}: {inc_start_date} ~ {end_date}")
-                    inc_data = TushareDataFetcher.get_stock_data(ts_code, inc_start_date, end_date)
+                    print(f"[增量更新] {ts_code} {freq}: {inc_start_date} ~ {end_date}")
+                    inc_data = TushareDataFetcher.get_stock_data(ts_code, inc_start_date, end_date, freq)
                     if inc_data:
                         inc_df = pd.DataFrame(inc_data)
                         local_df = pd.concat([local_df, inc_df]).drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
@@ -469,42 +478,44 @@ class CacheManager:
                 except Exception as e:
                     print(f"[保存失败] {e}")
 
-            try:
-                need_fill = (
-                    pro is not None and
-                    (('pe' not in local_df.columns) or local_df['pe'].isna().all() or
-                     ('pb' not in local_df.columns) or local_df['pb'].isna().all())
-                )
-                if need_fill:
-                    df_basic = pro.daily_basic(
-                        ts_code=ts_code,
-                        start_date=start_date.replace('-', ''),
-                        end_date=end_date.replace('-', ''),
-                        fields='trade_date,pe,pb'
+            # 只有日线数据才补充 pe/pb
+            if freq == 'D':
+                try:
+                    need_fill = (
+                        pro is not None and
+                        (('pe' not in local_df.columns) or local_df['pe'].isna().all() or
+                         ('pb' not in local_df.columns) or local_df['pb'].isna().all())
                     )
-                    if df_basic is not None and not df_basic.empty:
-                        df_basic = df_basic.rename(columns={'trade_date': 'date'})
-                        df_basic['date'] = pd.to_datetime(df_basic['date']).dt.strftime('%Y-%m-%d')
-                        if 'pe' not in local_df.columns:
-                            local_df['pe'] = None
-                        if 'pb' not in local_df.columns:
-                            local_df['pb'] = None
-                        merged = local_df.merge(df_basic[['date', 'pe', 'pb']], on='date', how='left', suffixes=('', '_new'))
-                        if 'pe_new' in merged.columns:
-                            merged['pe'] = merged['pe'].fillna(merged['pe_new'])
-                            merged.drop(columns=['pe_new'], inplace=True)
-                        if 'pb_new' in merged.columns:
-                            merged['pb'] = merged['pb'].fillna(merged['pb_new'])
-                            merged.drop(columns=['pb_new'], inplace=True)
-                        local_df = merged
-                        local_df.to_csv(file_path, index=False)
-            except Exception as e:
-                print(f"补齐pe/pb失败: {e}")
+                    if need_fill:
+                        df_basic = pro.daily_basic(
+                            ts_code=ts_code,
+                            start_date=start_date.replace('-', ''),
+                            end_date=end_date.replace('-', ''),
+                            fields='trade_date,pe,pb'
+                        )
+                        if df_basic is not None and not df_basic.empty:
+                            df_basic = df_basic.rename(columns={'trade_date': 'date'})
+                            df_basic['date'] = pd.to_datetime(df_basic['date']).dt.strftime('%Y-%m-%d')
+                            if 'pe' not in local_df.columns:
+                                local_df['pe'] = None
+                            if 'pb' not in local_df.columns:
+                                local_df['pb'] = None
+                            merged = local_df.merge(df_basic[['date', 'pe', 'pb']], on='date', how='left', suffixes=('', '_new'))
+                            if 'pe_new' in merged.columns:
+                                merged['pe'] = merged['pe'].fillna(merged['pe_new'])
+                                merged.drop(columns=['pe_new'], inplace=True)
+                            if 'pb_new' in merged.columns:
+                                merged['pb'] = merged['pb'].fillna(merged['pb_new'])
+                                merged.drop(columns=['pb_new'], inplace=True)
+                            local_df = merged
+                            local_df.to_csv(file_path, index=False)
+                except Exception as e:
+                    print(f"补齐pe/pb失败: {e}")
 
         else:
             # 3. 本地无数据，全量获取
-            print(f"[本地无缓存] 全量获取 {ts_code}: {start_date} ~ {end_date}")
-            data = TushareDataFetcher.get_stock_data(ts_code, start_date, end_date)
+            print(f"[本地无缓存] 全量获取 {ts_code} {freq}: {start_date} ~ {end_date}")
+            data = TushareDataFetcher.get_stock_data(ts_code, start_date, end_date, freq)
             if data:
                 local_df = pd.DataFrame(data)
                 try:
@@ -513,16 +524,17 @@ class CacheManager:
                 except Exception as e:
                     print(f"[保存失败] {e}")
             else:
-                # 尝试备用数据源
-                try:
-                    print("尝试使用备用数据源(Eastmoney)...")
-                    data = EastmoneyDataFetcher.get_stock_data(ts_code, start_date, end_date)
-                    if data:
-                        local_df = pd.DataFrame(data)
-                        local_df.to_csv(file_path, index=False)
-                        print(f"[持久化] (备用源) 已保存 {file_path}")
-                except Exception as e:
-                    print(f"备用源获取失败: {e}")
+                # 尝试备用数据源（仅日线）
+                if freq == 'D':
+                    try:
+                        print("尝试使用备用数据源(Eastmoney)...")
+                        data = EastmoneyDataFetcher.get_stock_data(ts_code, start_date, end_date)
+                        if data:
+                            local_df = pd.DataFrame(data)
+                            local_df.to_csv(file_path, index=False)
+                            print(f"[持久化] (备用源) 已保存 {file_path}")
+                    except Exception as e:
+                        print(f"备用源获取失败: {e}")
 
         # 4. 返回请求区间的数据
         if local_df is not None and not local_df.empty:
@@ -561,21 +573,41 @@ class TushareDataFetcher:
     """Tushare数据获取类"""
     
     @staticmethod
-    def get_stock_data(ts_code, start_date, end_date):
-        """获取股票日线数据"""
+    def get_stock_data(ts_code, start_date, end_date, freq='D'):
+        """获取股票数据，支持日线/周线/月线
+        
+        Args:
+            ts_code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            freq: 周期，'D'=日线, 'W'=周线, 'M'=月线
+        """
         if pro is None:
             print("✗ Tushare API未初始化")
             return None
             
         try:
-            print(f"正在获取 {ts_code} 从 {start_date} 到 {end_date} 的数据...")
+            print(f"正在获取 {ts_code} 从 {start_date} 到 {end_date} 的{freq}线数据...")
             
-            # 获取日线行情
-            df = pro.daily(
-                ts_code=ts_code,
-                start_date=start_date.replace('-', ''),
-                end_date=end_date.replace('-', '')
-            )
+            # 根据周期选择接口
+            if freq == 'W':
+                df = pro.weekly(
+                    ts_code=ts_code,
+                    start_date=start_date.replace('-', ''),
+                    end_date=end_date.replace('-', '')
+                )
+            elif freq == 'M':
+                df = pro.monthly(
+                    ts_code=ts_code,
+                    start_date=start_date.replace('-', ''),
+                    end_date=end_date.replace('-', '')
+                )
+            else:  # 默认日线
+                df = pro.daily(
+                    ts_code=ts_code,
+                    start_date=start_date.replace('-', ''),
+                    end_date=end_date.replace('-', '')
+                )
             
             print(f"获取到原始数据: {len(df) if df is not None else 'None'} 条")
             
@@ -3106,15 +3138,20 @@ def api_set_local_state():
 
 @app.route('/api/stock_data', methods=['GET'])
 def api_get_stock_data():
-    """获取股票数据（带缓存）"""
+    """获取股票数据（带缓存），支持日线/周线/月线"""
     ts_code = request.args.get('ts_code', '000001.SZ')
     start_date = request.args.get('start_date', '2022-01-01')
     end_date = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
+    freq = request.args.get('freq', 'D').upper()  # D=日线, W=周线, M=月线
     
-    print(f"API请求: ts_code={ts_code}, start_date={start_date}, end_date={end_date}")
+    # 验证 freq 参数
+    if freq not in ['D', 'W', 'M']:
+        freq = 'D'
+    
+    print(f"API请求: ts_code={ts_code}, start_date={start_date}, end_date={end_date}, freq={freq}")
     
     # 使用缓存管理器获取数据
-    data = cache_manager.get_stock_data(ts_code, start_date, end_date)
+    data = cache_manager.get_stock_data(ts_code, start_date, end_date, freq)
     print(f"从缓存管理器获取数据结果: {type(data)}, 长度: {len(data) if data else 'None'}")
     
     if data is None or (isinstance(data, list) and len(data) == 0):
@@ -3154,10 +3191,15 @@ def api_get_stock_data():
             if pd.isna(value):
                 row[key] = None
     
+    # 根据周期返回对应的周期标识
+    freq_name = {'D': 'daily', 'W': 'weekly', 'M': 'monthly'}.get(freq, 'daily')
+    
     return jsonify({
         'success': True,
         'message': 'ok',
         'ts_code': ts_code,
+        'freq': freq,
+        'freq_name': freq_name,
         'market_state': market_state,
         'data_count': len(data),
         'data': data,
