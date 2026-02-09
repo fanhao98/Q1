@@ -1761,6 +1761,18 @@ class StrategyEngine:
             'icon': '🐢',
             'description': '多时间框架突破+风险管理增强：突破确认+趋势过滤+假突破过滤+风险评分',
             'features': ['突破入场', '趋势过滤', '波动率过滤', '成交量确认', 'ADX强度', '假突破过滤', '风险管理']
+        },
+        'chip_peak_breakout': {
+            'name': '筹码突破策略',
+            'icon': '🧩',
+            'description': '筹码单峰低位+放量突破：通过筹码分布识别低位集中区域，配合放量突破信号',
+            'features': ['筹码分布', '单峰识别', '集中度分析', '低位判断', '放量突破', '趋势确认', '筹码突破']
+        },
+        'random_forest_ml': {
+            'name': '机器学习策略',
+            'icon': '🌲',
+            'description': '随机森林预测+条件确认：用历史数据训练预测模型，概率过滤+多重确认',
+            'features': ['随机森林', '概率预测', '特征工程', 'OOB验证', '趋势过滤', '波动率过滤', '跳空过滤']
         }
     }
 
@@ -2773,6 +2785,364 @@ class StrategyEngine:
                         # 计算止损价（用于后续风险管理）
                         atr = d.get('atr', abs(d['high'] - d['low']) * 0.5)
                         stop_price = d['close'] - atr * atr_multiplier
+                
+                elif strategy_name == 'chip_peak_breakout':
+                    # 筹码突破策略：筹码单峰低位 + 放量突破
+                    chip_score = 0
+                    conditions_met = 0
+                    
+                    # 筹码计算参数
+                    chip_lookback = int(config.get('chipLookback', 120))
+                    chip_bins = int(config.get('chipBins', 30))
+                    chip_decay = float(config.get('chipDecay', 0.985))
+                    chip_single_peak_ratio = float(config.get('chipSinglePeakRatio', 1.6))
+                    chip_peak_min_pct = float(config.get('chipPeakMinPct', 0.12))
+                    chip_min_concentration = float(config.get('chipMinConcentration', 0.50))
+                    chip_low_pos_pct = float(config.get('chipLowPosPct', 0.35))
+                    
+                    if i < chip_lookback:
+                        continue
+                    
+                    # 1. 计算筹码分布
+                    chip_data = df.iloc[i-chip_lookback:i+1].copy()
+                    
+                    # 计算加权成交量（时间衰减）
+                    weights = [chip_decay ** (chip_lookback - j - 1) for j in range(chip_lookback)]
+                    chip_data['weight'] = weights + [1.0]
+                    chip_data['weighted_vol'] = chip_data['volume'] * chip_data['weight']
+                    
+                    # 价格区间分箱
+                    price_min = chip_data['low'].min()
+                    price_max = chip_data['high'].max()
+                    price_range = price_max - price_min
+                    
+                    if price_range <= 0:
+                        continue
+                    
+                    # 计算每个价格区间的筹码量
+                    bin_size = price_range / chip_bins
+                    chip_distribution = []
+                    
+                    for b in range(chip_bins):
+                        bin_low = price_min + b * bin_size
+                        bin_high = bin_low + bin_size
+                        bin_center = (bin_low + bin_high) / 2
+                        
+                        # 计算该区间内的加权成交量
+                        mask = (chip_data['close'] >= bin_low) & (chip_data['close'] < bin_high)
+                        vol_sum = chip_data.loc[mask, 'weighted_vol'].sum()
+                        
+                        chip_distribution.append({
+                            'center': bin_center,
+                            'low': bin_low,
+                            'high': bin_high,
+                            'volume': vol_sum
+                        })
+                    
+                    # 找到筹码峰
+                    total_chip = sum(c['volume'] for c in chip_distribution)
+                    if total_chip <= 0:
+                        continue
+                    
+                    # 按筹码量排序
+                    sorted_chips = sorted(chip_distribution, key=lambda x: x['volume'], reverse=True)
+                    
+                    # 主峰
+                    peak_chip = sorted_chips[0]
+                    peak_pct = peak_chip['volume'] / total_chip
+                    
+                    # 次峰
+                    second_peak_pct = sorted_chips[1]['volume'] / total_chip if len(sorted_chips) > 1 else 0
+                    
+                    # 单峰强度
+                    single_peak_strength = peak_pct / second_peak_pct if second_peak_pct > 0 else 999
+                    
+                    # 筹码集中度 (90%筹码所在区间)
+                    sorted_by_price = sorted(chip_distribution, key=lambda x: x['center'])
+                    cumsum = 0
+                    c90_low = c90_high = None
+                    c70_low = c70_high = None
+                    
+                    for c in sorted_by_price:
+                        cumsum += c['volume']
+                        if c90_low is None and cumsum >= total_chip * 0.05:
+                            c90_low = c['center']
+                        if c70_low is None and cumsum >= total_chip * 0.15:
+                            c70_low = c['center']
+                        if c90_high is None and cumsum >= total_chip * 0.95:
+                            c90_high = c['center']
+                        if c70_high is None and cumsum >= total_chip * 0.85:
+                            c70_high = c['center']
+                    
+                    c90_range = ((c90_high - c90_low) / price_range * 100) if c90_high and c90_low and price_range > 0 else 100
+                    c70_range = ((c70_high - c70_low) / price_range * 100) if c70_high and c70_low and price_range > 0 else 100
+                    concentration = 100 - c90_range
+                    
+                    # 主峰位置（在价格区间的位置）
+                    peak_position = (peak_chip['center'] - price_min) / price_range if price_range > 0 else 0.5
+                    
+                    # 2. 筹码单峰条件
+                    if config.get('useChipSinglePeak', True):
+                        if peak_pct >= chip_peak_min_pct and single_peak_strength >= chip_single_peak_ratio:
+                            conditions_met += 1
+                            chip_score += 25
+                            # 单峰越强，分数越高
+                            if single_peak_strength > 2.0:
+                                chip_score += 10
+                    
+                    # 3. 筹码集中度条件
+                    if config.get('useChipConcentration', True):
+                        if concentration >= chip_min_concentration:
+                            conditions_met += 1
+                            chip_score += 20
+                            if concentration > 0.60:
+                                chip_score += 10
+                    
+                    # 4. 筹码低位条件
+                    if config.get('useChipLowPosition', True):
+                        if peak_position <= chip_low_pos_pct:
+                            conditions_met += 1
+                            chip_score += 25
+                            # 越低位越好
+                            if peak_position < 0.25:
+                                chip_score += 10
+                    
+                    # 5. 价格突破条件（核心）
+                    if config.get('usePriceBreakout', True):
+                        breakout_period = int(config.get('breakoutPeriod', 30))
+                        if i >= breakout_period:
+                            recent_high = df.iloc[i-breakout_period:i]['high'].max()
+                            if d['close'] > recent_high * 0.995:
+                                conditions_met += 1
+                                chip_score += 30
+                                # 突破幅度
+                                breakout_pct = (d['close'] - recent_high) / recent_high * 100
+                                if 0.5 < breakout_pct < 3:
+                                    chip_score += 10
+                    
+                    # 6. 成交量放大条件
+                    if config.get('useVolumeConfirm', True):
+                        vol_multi = float(config.get('volumeMulti', 2.0))
+                        vol_ratio = d['volume'] / d['volMa5'] if d.get('volMa5') and d['volMa5'] > 0 else 1
+                        
+                        if vol_ratio > vol_multi:
+                            conditions_met += 1
+                            chip_score += 20
+                            if vol_ratio > vol_multi * 1.5:
+                                chip_score += 10
+                    
+                    # 7. 趋势确认
+                    if config.get('useTrendConfirm', True):
+                        if d.get('ma20') and d.get('ma60'):
+                            if d['close'] > d['ma20'] > d['ma60']:
+                                chip_score += 15
+                            if d.get('ma5') and d['ma5'] > d['ma20']:
+                                chip_score += 10
+                    
+                    # 8. 避免过度延伸
+                    if config.get('useOverboughtFilter', True):
+                        if d.get('rsi') and d['rsi'] < 70:
+                            chip_score += 10
+                        if peak_position < 0.50 and d['close'] > peak_chip['high']:
+                            chip_score += 10
+                    
+                    # 动态买入条件
+                    min_conditions = config.get('minConditions', 4)
+                    score_threshold = config.get('scoreThreshold', 70)
+                    
+                    if conditions_met >= min_conditions and chip_score >= score_threshold:
+                        buy_signal = True
+                        signal_strength = min(95, chip_score)
+                
+                elif strategy_name == 'random_forest_ml':
+                    # 机器学习策略：随机森林预测 + 条件确认
+                    ml_score = 0
+                    conditions_met = 0
+                    
+                    # ML参数
+                    rf_lookback = int(config.get('rfLookback', 240))
+                    rf_horizon = int(config.get('rfHorizon', 10))
+                    rf_return_threshold = float(config.get('rfReturnThreshold', 0.05))
+                    rf_trees = int(config.get('rfTrees', 25))
+                    rf_max_depth = int(config.get('rfMaxDepth', 3))
+                    rf_min_prob = float(config.get('rfMinProb', 0.65))
+                    rf_min_oob_acc = float(config.get('rfMinOobAcc', 0.52))
+                    rf_min_edge = float(config.get('rfMinEdge', 0.03))
+                    
+                    if i < rf_lookback + rf_horizon:
+                        continue
+                    
+                    # 1. 构建特征和标签
+                    train_data = df.iloc[i-rf_lookback-rf_horizon:i-rf_horizon].copy()
+                    
+                    # 特征工程
+                    features_list = []
+                    labels = []
+                    
+                    for j in range(len(train_data) - 20):
+                        if j + rf_horizon >= len(train_data):
+                            break
+                        
+                        row = train_data.iloc[j]
+                        
+                        # 基础特征
+                        feat = [
+                            row.get('rsi', 50) / 100,
+                            row.get('macd', 0),
+                            (row.get('close', 0) - row.get('ma20', row.get('close', 0))) / row.get('ma20', 1) if row.get('ma20') else 0,
+                            (row.get('close', 0) - row.get('ma60', row.get('close', 0))) / row.get('ma60', 1) if row.get('ma60') else 0,
+                            row.get('bollWidth', 0.1) * 10,
+                            (row.get('volume', 0) / row.get('volMa5', 1) - 1) if row.get('volMa5') else 0,
+                            row.get('adx', 20) / 100,
+                            (row.get('plus_di', 20) - row.get('minus_di', 20)) / 100 if row.get('plus_di') and row.get('minus_di') else 0,
+                            (row.get('atr_pct', 2)) / 10,
+                        ]
+                        
+                        # 未来收益
+                        future_return = (train_data.iloc[j + rf_horizon]['close'] - row['close']) / row['close'] if row['close'] > 0 else 0
+                        label = 1 if future_return >= rf_return_threshold else 0
+                        
+                        features_list.append(feat)
+                        labels.append(label)
+                    
+                    if len(features_list) < 30:
+                        continue
+                    
+                    # 2. 简化的随机森林实现（使用多数投票）
+                    n_samples = len(features_list)
+                    n_features = len(features_list[0])
+                    
+                    # 当前数据点特征
+                    current_feat = [
+                        d.get('rsi', 50) / 100,
+                        d.get('macd', 0),
+                        (d.get('close', 0) - d.get('ma20', d.get('close', 0))) / d.get('ma20', 1) if d.get('ma20') else 0,
+                        (d.get('close', 0) - d.get('ma60', d.get('close', 0))) / d.get('ma60', 1) if d.get('ma60') else 0,
+                        d.get('bollWidth', 0.1) * 10,
+                        (d.get('volume', 0) / d.get('volMa5', 1) - 1) if d.get('volMa5') else 0,
+                        d.get('adx', 20) / 100,
+                        (d.get('plus_di', 20) - d.get('minus_di', 20)) / 100 if d.get('plus_di') and d.get('minus_di') else 0,
+                        (d.get('atr_pct', 2)) / 10,
+                    ]
+                    
+                    # 多棵决策树投票
+                    votes = []
+                    oob_correct = 0
+                    oob_total = 0
+                    
+                    np.random.seed(42)
+                    for tree_idx in range(rf_trees):
+                        # 自助采样
+                        indices = np.random.choice(n_samples, n_samples, replace=True)
+                        oob_mask = np.bincount(indices, minlength=n_samples) == 0
+                        
+                        # 特征子采样
+                        feat_indices = np.random.choice(n_features, max(1, n_features // 2), replace=False)
+                        
+                        # 简化的决策树：基于特征阈值的多数投票
+                        tree_votes = []
+                        for idx in indices:
+                            sample = features_list[idx]
+                            # 简单的决策规则
+                            score = 0
+                            for fi in feat_indices:
+                                if sample[fi] > np.median([f[fi] for f in features_list]):
+                                    score += 1
+                            tree_votes.append(1 if score > len(feat_indices) / 2 else 0)
+                        
+                        # OOB评估
+                        if np.any(oob_mask):
+                            oob_indices = np.where(oob_mask)[0]
+                            for oob_idx in oob_indices[:min(5, len(oob_indices))]:
+                                sample = features_list[oob_idx]
+                                score = 0
+                                for fi in feat_indices:
+                                    if sample[fi] > np.median([f[fi] for f in features_list]):
+                                        score += 1
+                                pred = 1 if score > len(feat_indices) / 2 else 0
+                                if pred == labels[oob_idx]:
+                                    oob_correct += 1
+                                oob_total += 1
+                        
+                        # 预测当前样本
+                        score = 0
+                        for fi in feat_indices:
+                            if current_feat[fi] > np.median([f[fi] for f in features_list]):
+                                score += 1
+                        votes.append(1 if score > len(feat_indices) / 2 else 0)
+                    
+                    # 3. 预测结果
+                    prob_up = sum(votes) / len(votes) if votes else 0.5
+                    baseline_prob = sum(labels) / len(labels) if labels else 0.5
+                    edge = prob_up - baseline_prob
+                    
+                    # OOB准确率
+                    oob_acc = oob_correct / oob_total if oob_total > 0 else 0.5
+                    
+                    # 4. ML预测条件
+                    if config.get('useMlPrediction', True):
+                        if prob_up >= rf_min_prob and edge >= rf_min_edge and oob_acc >= rf_min_oob_acc:
+                            conditions_met += 1
+                            ml_score += 40
+                            # 概率越高，分数越高
+                            if prob_up > 0.75:
+                                ml_score += 15
+                            if edge > 0.05:
+                                ml_score += 10
+                    
+                    # 5. 趋势过滤
+                    if config.get('useTrendFilter', True):
+                        rf_trend_mode = int(config.get('rfTrendMode', 1))
+                        
+                        if rf_trend_mode >= 1:
+                            if d.get('ma20') and d['close'] > d['ma20']:
+                                conditions_met += 1
+                                ml_score += 15
+                            else:
+                                ml_score -= 20
+                        
+                        if rf_trend_mode >= 2:
+                            if d.get('ma20') and d.get('ma60'):
+                                if d['ma20'] >= d['ma60']:
+                                    ma20_slope = (d['ma20'] - df.iloc[i-5]['ma20']) / d['ma20'] * 100 if i >= 5 and df.iloc[i-5]['ma20'] > 0 else 0
+                                    if ma20_slope > 0:
+                                        conditions_met += 1
+                                        ml_score += 15
+                    
+                    # 6. 成交量确认
+                    if config.get('useVolumeConfirm', True):
+                        vol_multi = float(config.get('volumeMulti', 1.3))
+                        vol_ratio = d['volume'] / d['volMa5'] if d.get('volMa5') and d['volMa5'] > 0 else 1
+                        
+                        if vol_ratio > vol_multi:
+                            conditions_met += 1
+                            ml_score += 15
+                    
+                    # 7. 跳空过滤
+                    if config.get('useGapFilter', True):
+                        rf_max_gap = float(config.get('rfMaxGapPct', 0.07))
+                        if i > 0:
+                            gap = (d['open'] - df.iloc[i-1]['close']) / df.iloc[i-1]['close'] if df.iloc[i-1]['close'] > 0 else 0
+                            if abs(gap) < rf_max_gap:
+                                ml_score += 10
+                            else:
+                                ml_score -= 15
+                    
+                    # 8. 波动率过滤
+                    if config.get('useVolatilityFilter', True):
+                        rf_max_atr = float(config.get('rfMaxAtrPct', 0.12))
+                        if d.get('atr_pct') and d['atr_pct'] < rf_max_atr:
+                            ml_score += 10
+                        elif d.get('atr_pct') and d['atr_pct'] > rf_max_atr * 1.5:
+                            ml_score -= 10
+                    
+                    # 动态买入条件
+                    min_conditions = config.get('minConditions', 2)
+                    score_threshold = config.get('scoreThreshold', 60)
+                    
+                    if conditions_met >= min_conditions and ml_score >= score_threshold:
+                        buy_signal = True
+                        signal_strength = min(95, ml_score + int(prob_up * 10))
             
             if (not buy_signal) and (not in_cooldown) and position == 0 and config.get('enableTrendReentry', True):
                 if strategy_name in {'trend_enhanced', 'turtle_enhanced', 'momentum_rotation', 'deep_fusion', 'volume_breakout'}:
