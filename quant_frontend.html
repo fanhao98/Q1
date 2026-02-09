@@ -2406,6 +2406,8 @@ html[data-theme="light"] .toggle-slider:before {
         flex-direction: column;
         padding: 6px 8px;
         gap: 4px;
+        width: 100%;
+        box-sizing: border-box;
     }
     
     .header h1 {
@@ -2435,6 +2437,13 @@ html[data-theme="light"] .toggle-slider:before {
         align-items: center;
         margin-top: 4px;
         gap: 6px;
+    }
+    
+    .header-actions .appearance-select,
+    .header-actions .help-link {
+        font-size: 12px;
+        padding: 5px 10px;
+        min-width: auto;
     }
     
     .main-container {
@@ -2538,7 +2547,7 @@ html[data-theme="light"] .toggle-slider:before {
     
     .btn {
         padding: 5px 8px;
-        font-size: 11px;
+        font-size: 12px;
         border-radius: 3px;
         white-space: nowrap;
     }
@@ -11940,9 +11949,9 @@ TUSHARE_TOKEN=你的token
                 } catch (e) {
                 }
                 
-                let html = `<div style="display:flex; gap:10px; flex-wrap:nowrap; align-items:baseline; overflow-x:auto; white-space:nowrap;">`;
-                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: 14px;">${titleText}</span>`;
-                html += `<span style="color: #ccc; font-size: 11px;">${data.date}</span>`;
+                let html = `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:baseline; line-height:1.4;">`;
+                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: 13px;">${titleText}</span>`;
+                html += `<span style="color: #ccc; font-size: 10px;">${data.date}</span>`;
                 html += `<span style="font-size: 10px;">开:<span style="color:${closeColor}; font-weight:600;">${data.open.toFixed(2)}</span></span>`;
                 html += `<span style="font-size: 10px;">高:<span style="color:${closeColor}; font-weight:600;">${data.high.toFixed(2)}</span></span>`;
                 html += `<span style="font-size: 10px;">低:<span style="color:${closeColor}; font-weight:600;">${data.low.toFixed(2)}</span></span>`;
@@ -11955,7 +11964,7 @@ TUSHARE_TOKEN=你的token
                 if (data.turnover) html += `<span style="font-size: 10px;">换:<span style="color:#ffa502; font-weight:600;">${data.turnover.toFixed(2)}%</span></span>`;
                 html += `</div>`;
 
-                html += `<div style="margin-top: 4px; display:flex; gap:10px; flex-wrap:nowrap; overflow-x:auto; white-space:nowrap;">`;
+                html += `<div style="margin-top: 4px; display:flex; gap:6px; flex-wrap:wrap; line-height:1.4;">`;
                 if (data.ma5) html += `<span style="font-size: 10px;">MA5:<span style="color:#FFD700; font-weight:600;">${data.ma5.toFixed(2)}</span></span>`;
                 if (data.ma10) html += `<span style="font-size: 10px;">MA10:<span style="color:#00BFFF; font-weight:600;">${data.ma10.toFixed(2)}</span></span>`;
                 if (data.ma20) html += `<span style="font-size: 10px;">MA20:<span style="color:#FF00FF; font-weight:600;">${data.ma20.toFixed(2)}</span></span>`;
@@ -12455,30 +12464,33 @@ TUSHARE_TOKEN=你的token
             const chipTextFaintColor = rootStyles.getPropertyValue('--text-faint').trim() || (isLightTheme ? '#64748b' : '#aaa');
             const chipTextStroke = isLightTheme ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)';
 
+            // 检测是否为移动端
+            const isMobile = window.innerWidth <= 768;
+
             const option = {
                 backgroundColor: 'transparent',
                 legend: {
                     data: legendData,
-                    textStyle: { color: chipTextMutedColor, fontSize: 9 },
+                    textStyle: { color: chipTextMutedColor, fontSize: isMobile ? 8 : 9 },
                     type: 'scroll',
                     orient: 'horizontal',
                     top: 5,
                     left: 0,
                     right: 0,
-                    itemGap: 4,
-                    itemWidth: 8,
-                    itemHeight: 8,
-                    pageIconSize: 8,
+                    itemGap: isMobile ? 3 : 4,
+                    itemWidth: isMobile ? 6 : 8,
+                    itemHeight: isMobile ? 6 : 8,
+                    pageIconSize: isMobile ? 6 : 8,
                     pageButtonItemGap: 2,
-                    pageTextStyle: { color: chipTextFaintColor, fontSize: 8 }
+                    pageTextStyle: { color: chipTextFaintColor, fontSize: isMobile ? 7 : 8 }
                 },
                 grid: {
                     left: 0,
                     right: 0,
                     // 必须与 K 线图主图配置完全一致
                     // K线图配置: grid: [{ left: 50, right: 50, top: 50, height: '50%' }, ...]
-                    top: 65,  
-                    height: '50%' 
+                    top: isMobile ? 55 : 65,
+                    height: isMobile ? '55%' : '50%'
                 },
                 xAxis: {
                     type: 'value',
@@ -12501,8 +12513,8 @@ TUSHARE_TOKEN=你的token
                 graphic: [
                     {
                         type: 'group',
-                        left: 10,
-                        bottom: 30, // 稍微上移一点，避免太贴底
+                        left: isMobile ? 5 : 10,
+                        bottom: isMobile ? 10 : 30,
                         children: [
                             {
                                 type: 'text',
@@ -12510,7 +12522,11 @@ TUSHARE_TOKEN=你的token
                                 left: 0,
                                 top: 0,
                                 style: {
-                                    text: [
+                                    text: isMobile ? [
+                                        `${currentDate} 获利:${profitRatio}% 成本:${avgCostText}`,
+                                        `压:${maxVolAbovePrice !== null ? maxVolAbovePrice.toFixed(2) : '--'} 支:${maxVolBelowPrice !== null ? maxVolBelowPrice.toFixed(2) : '--'}`,
+                                        `C90:${c90.ratio}% C70:${c70.ratio}%`
+                                    ].join('\n') : [
                                         `日期: ${currentDate}`,
                                         `获利比例: ${profitRatio}%`,
                                         `平均成本: ${avgCostText}`,
@@ -12519,11 +12535,11 @@ TUSHARE_TOKEN=你的token
                                         `90%筹码集中度: ${c90.ratio}%`,
                                         `70%筹码集中度: ${c70.ratio}%`
                                     ].join('\n'),
-                                    font: '10px "Microsoft YaHei", sans-serif',
+                                    font: isMobile ? '9px "Microsoft YaHei", sans-serif' : '10px "Microsoft YaHei", sans-serif',
                                     fill: chipTextColor,
                                     stroke: chipTextStroke,
-                                    lineWidth: 2,
-                                    lineHeight: 16,
+                                    lineWidth: isMobile ? 1 : 2,
+                                    lineHeight: isMobile ? 14 : 16,
                                     shadowBlur: 1,
                                     shadowColor: isLightTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.8)'
                                 }
