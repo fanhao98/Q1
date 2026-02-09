@@ -10755,9 +10755,9 @@ TUSHARE_TOKEN=你的token
             console.log(`🔍 策略 [${key}] 是否有优化结果:`, hasOptimizationResult);
             
             html += `<div class="param-actions">
-                ${hasOptimizationResult ? `<button onclick="applyAllOptimizedParams('${key}')" class="btn btn-success" style="padding:4px 8px;font-size:14px;margin-right:5px;">✅ 优化更新</button>` : ''}
-                <button onclick="resetStrategyParams()" class="btn btn-primary" style="padding:4px 8px;font-size:14px;">重置参数</button>
-                <button onclick="saveStrategyParams()" class="btn btn-primary" style="padding:4px 8px;font-size:14px;">保存配置</button>
+                ${hasOptimizationResult ? `<button onclick="applyAllOptimizedParams('${key}')" class="btn btn-success" style="padding:4px 8px;font-size:12px;margin-right:5px;">✅ 优化更新</button>` : ''}
+                <button onclick="resetStrategyParams()" class="btn btn-primary" style="padding:4px 8px;font-size:12px;">重置参数</button>
+                <button onclick="saveStrategyParams()" class="btn btn-primary" style="padding:4px 8px;font-size:12px;">保存配置</button>
             </div>`;
             
             document.getElementById('strategyParams').innerHTML = html;
@@ -12426,7 +12426,7 @@ TUSHARE_TOKEN=你的token
                         formatter: `压力位: ${maxVolAbovePrice.toFixed(2)}`,
                         position: 'start',
                         color: '#2ed573',
-                        fontSize: 11,
+                        fontSize: 9,
                         fontWeight: 'bold'
                     },
                     lineStyle: { color: '#2ed573', type: 'dashed', width: 2 }
@@ -12441,7 +12441,7 @@ TUSHARE_TOKEN=你的token
                         formatter: `支撑位: ${maxVolBelowPrice.toFixed(2)}`,
                         position: 'start',
                         color: '#ff4757',
-                        fontSize: 11,
+                        fontSize: 9,
                         fontWeight: 'bold'
                     },
                     lineStyle: { color: '#ff4757', type: 'dashed', width: 2 }
@@ -12459,18 +12459,18 @@ TUSHARE_TOKEN=你的token
                 backgroundColor: 'transparent',
                 legend: {
                     data: legendData,
-                    textStyle: { color: chipTextMutedColor },
+                    textStyle: { color: chipTextMutedColor, fontSize: 9 },
                     type: 'scroll',
                     orient: 'horizontal',
                     top: 5,
                     left: 0,
                     right: 0,
-                    itemGap: 6,
-                    itemWidth: 10,
-                    itemHeight: 10,
-                    pageIconSize: 10,
-                    pageButtonItemGap: 4,
-                    pageTextStyle: { color: chipTextFaintColor }
+                    itemGap: 4,
+                    itemWidth: 8,
+                    itemHeight: 8,
+                    pageIconSize: 8,
+                    pageButtonItemGap: 2,
+                    pageTextStyle: { color: chipTextFaintColor, fontSize: 8 }
                 },
                 grid: {
                     left: 0,
@@ -12519,11 +12519,11 @@ TUSHARE_TOKEN=你的token
                                         `90%筹码集中度: ${c90.ratio}%`,
                                         `70%筹码集中度: ${c70.ratio}%`
                                     ].join('\n'),
-                                    font: '12px "Microsoft YaHei", sans-serif',
+                                    font: '10px "Microsoft YaHei", sans-serif',
                                     fill: chipTextColor,
                                     stroke: chipTextStroke,
-                                    lineWidth: 3,
-                                    lineHeight: 20,
+                                    lineWidth: 2,
+                                    lineHeight: 16,
                                     shadowBlur: 1,
                                     shadowColor: isLightTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.8)'
                                 }
