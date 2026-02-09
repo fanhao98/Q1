@@ -11,10 +11,15 @@ from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import json
+import hashlib
+import io
 import os
 import re
+import shutil
 import sys
+import tempfile
 import threading
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -34,6 +39,32 @@ CORS(
     },
     supports_credentials=True,
 )
+
+VERBOSE = (os.getenv('QUANT_VERBOSE') or '0').strip() == '1'
+
+def _log(*args, **kwargs):
+    if VERBOSE:
+        print(*args, **kwargs)
+
+_RUNTIME_STATS_LOCK = threading.Lock()
+_RUNTIME_STATS = {
+    'stock_data_requests': 0,
+    'stock_data_lite_requests': 0,
+    'stock_pool_quotes_requests': 0,
+    'local_state_writes': 0,
+    'local_state_skipped_writes': 0,
+    'cache_df_mem_hits': 0,
+    'cache_df_disk_reads': 0,
+    'cache_csv_writes': 0,
+    'tushare_fetch_calls': 0,
+}
+
+def _inc_stat(name, value=1):
+    try:
+        with _RUNTIME_STATS_LOCK:
+            _RUNTIME_STATS[name] = int(_RUNTIME_STATS.get(name) or 0) + int(value)
+    except Exception:
+        pass
 
 def _get_app_dir():
     if getattr(sys, 'frozen', False):
@@ -72,6 +103,12 @@ try:
 except Exception:
     pass
 
+FUNDAMENTALS_CACHE_DIR = os.path.join(DATA_ROOT, 'fundamentals_cache')
+try:
+    os.makedirs(FUNDAMENTALS_CACHE_DIR, exist_ok=True)
+except Exception:
+    pass
+
 
 LOCAL_STATE_DIR = os.path.join(DATA_ROOT, 'local_state')
 try:
@@ -81,6 +118,7 @@ except Exception:
 
 
 _LOCAL_STATE_LOCK = threading.Lock()
+_LOCAL_STATE_LAST_DIGEST = {}
 _ALLOWED_LOCAL_STATE_KEYS = {
     'quant_ui_state_v1',
     'quant_kline_zoom_state_v1',
@@ -111,6 +149,32 @@ def _load_json_cache_file(file_path):
 def _save_json_cache_file(file_path, items):
     try:
         payload = {'cached_at': datetime.now().isoformat(), 'data': items}
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def _load_json_cache_payload(file_path):
+    try:
+        if not os.path.exists(file_path):
+            return None
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return None
+        cached_at = data.get('cached_at')
+        if not cached_at:
+            return None
+        return {'cached_at': cached_at, 'data': data.get('data')}
+    except Exception:
+        return None
+
+
+def _save_json_cache_payload(file_path, payload_data):
+    try:
+        payload = {'cached_at': datetime.now().isoformat(), 'data': payload_data}
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(payload, f, ensure_ascii=False)
         return True
@@ -154,13 +218,23 @@ def _write_local_state_value(key, value):
     path = _local_state_path_for_key(key)
     if not path:
         return False
+    try:
+        value_json = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    except Exception:
+        value_json = repr(value)
+    digest = hashlib.sha1(value_json.encode('utf-8', errors='ignore')).hexdigest()
     payload = {'saved_at': datetime.now().isoformat(), 'key': key, 'value': value}
     tmp_path = path + ".tmp"
     try:
         with _LOCAL_STATE_LOCK:
+            if _LOCAL_STATE_LAST_DIGEST.get(key) == digest and os.path.exists(path):
+                _inc_stat('local_state_skipped_writes', 1)
+                return True
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
             os.replace(tmp_path, path)
+            _LOCAL_STATE_LAST_DIGEST[key] = digest
+            _inc_stat('local_state_writes', 1)
         return True
     except Exception:
         try:
@@ -192,6 +266,43 @@ def api_health():
         'pro_init_error': _PRO_INIT_ERROR,
         'data_root': DATA_ROOT
     })
+
+@app.route('/api/runtime_stats', methods=['GET'])
+def api_runtime_stats():
+    with _RUNTIME_STATS_LOCK:
+        stats = dict(_RUNTIME_STATS)
+    return jsonify({'success': True, 'verbose': VERBOSE, 'stats': stats})
+
+@app.route('/api/stock_pool_quotes', methods=['POST'])
+def api_stock_pool_quotes():
+    _inc_stat('stock_pool_quotes_requests', 1)
+    payload = request.get_json(silent=True) or {}
+    codes = payload.get('codes') or []
+    if not isinstance(codes, list):
+        return jsonify({'success': False, 'message': 'codes 必须是数组'}), 400
+    end_date = (payload.get('end_date') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+    freq = (payload.get('freq') or 'D').strip().upper()
+    cache_only = str(payload.get('cache_only') if 'cache_only' in payload else '1').strip().lower() in ('1', 'true', 'yes', 'y')
+
+    results = []
+    for raw in codes:
+        ts_code = (str(raw or '')).strip().upper()
+        if not ts_code:
+            continue
+        quote = cache_manager.get_latest_quote(ts_code, end_date=end_date, freq=freq, cache_only=cache_only)
+        if not quote:
+            results.append({'ts_code': ts_code, 'ok': False})
+            continue
+        results.append({
+            'ts_code': ts_code,
+            'ok': True,
+            'date': quote.get('date'),
+            'close': quote.get('close'),
+            'pe': quote.get('pe'),
+            'pb': quote.get('pb'),
+        })
+
+    return jsonify({'success': True, 'end_date': end_date, 'freq': freq, 'cache_only': cache_only, 'data': results})
 
 def _load_tushare_token():
     candidates = [
@@ -408,6 +519,11 @@ class CacheManager:
         self.stock_cache = {}
         self.params_cache = {}
         self.data_dir = os.path.join(DATA_ROOT, 'data')
+        self._df_mem_cache = {}
+        self._df_mem_cache_ttl_sec = int((os.getenv('QUANT_DF_CACHE_TTL_SEC') or '300').strip() or 300)
+        self._df_mem_cache_max = int((os.getenv('QUANT_DF_CACHE_MAX') or '64').strip() or 64)
+        self._no_update_until = {}
+        self._no_update_ttl_sec = int((os.getenv('QUANT_NO_UPDATE_TTL_SEC') or '3600').strip() or 3600)
         if not os.path.exists(self.data_dir):
             try:
                 os.makedirs(self.data_dir)
@@ -427,56 +543,113 @@ class CacheManager:
         freq_suffix = '' if freq == 'D' else f'_{freq}'
         file_path = os.path.join(self.data_dir, f"{ts_code}{freq_suffix}.csv")
         local_df = None
+        mem_cache_key = (ts_code, freq)
+        file_mtime = None
+        try:
+            if os.path.exists(file_path):
+                file_mtime = os.path.getmtime(file_path)
+        except Exception:
+            file_mtime = None
         
         # 1. 尝试读取本地文件
-        if os.path.exists(file_path):
+        mem_hit = False
+        cached_entry = self._df_mem_cache.get(mem_cache_key)
+        if cached_entry and cached_entry.get('mtime') == file_mtime:
+            loaded_at = cached_entry.get('loaded_at') or 0
+            if (time.time() - loaded_at) <= self._df_mem_cache_ttl_sec:
+                df = cached_entry.get('df')
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    local_df = df
+                    mem_hit = True
+
+        if local_df is None and os.path.exists(file_path):
             try:
                 # 指定dtype以防止数据类型错误
                 local_df = pd.read_csv(file_path, dtype={'date': str})
                 if 'date' in local_df.columns:
                     local_df = local_df.sort_values('date').drop_duplicates(subset=['date']).reset_index(drop=True)
                 else:
-                    print(f"[数据损坏] {file_path} 缺少date列")
+                    _log(f"[数据损坏] {file_path} 缺少date列")
                     local_df = None
             except Exception as e:
-                print(f"[读取缓存失败] {file_path}: {e}")
+                _log(f"[读取缓存失败] {file_path}: {e}")
                 local_df = None
+
+        if local_df is not None and not local_df.empty and not mem_hit:
+            _inc_stat('cache_df_disk_reads', 1)
+            try:
+                if file_mtime is None and os.path.exists(file_path):
+                    file_mtime = os.path.getmtime(file_path)
+            except Exception:
+                file_mtime = None
+            self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
+            if len(self._df_mem_cache) > self._df_mem_cache_max:
+                try:
+                    oldest_key = min(self._df_mem_cache.items(), key=lambda kv: kv[1].get('loaded_at') or 0)[0]
+                    self._df_mem_cache.pop(oldest_key, None)
+                except Exception:
+                    pass
         
         # 2. 检查并补充数据
         if local_df is not None and not local_df.empty:
+            if mem_hit:
+                _inc_stat('cache_df_mem_hits', 1)
             local_min = local_df['date'].min()
             local_max = local_df['date'].max()
             data_changed = False
+            base_df = local_df
             
             # A. 向前补充（请求开始时间早于本地最早时间）
             if start_date < local_min:
                 pre_end_date = (datetime.strptime(local_min, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
                 if start_date <= pre_end_date:
-                    print(f"[向前补充] {ts_code} {freq}: {start_date} ~ {pre_end_date}")
-                    pre_data = TushareDataFetcher.get_stock_data(ts_code, start_date, pre_end_date, freq)
+                    now_ts = time.time()
+                    if self._no_update_until.get((ts_code, freq, 'pre'), 0) > now_ts:
+                        pre_data = None
+                    else:
+                        _log(f"[向前补充] {ts_code} {freq}: {start_date} ~ {pre_end_date}")
+                        pre_data = TushareDataFetcher.get_stock_data(ts_code, start_date, pre_end_date, freq)
                     if pre_data:
+                        if local_df is base_df:
+                            local_df = local_df.copy()
                         pre_df = pd.DataFrame(pre_data)
                         local_df = pd.concat([pre_df, local_df]).drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
                         data_changed = True
+                    else:
+                        self._no_update_until[(ts_code, freq, 'pre')] = time.time() + self._no_update_ttl_sec
             
             # B. 向后补充（请求结束时间晚于本地最新时间）
             if end_date > local_max:
                 inc_start_date = (datetime.strptime(local_max, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 if inc_start_date <= end_date:
-                    print(f"[增量更新] {ts_code} {freq}: {inc_start_date} ~ {end_date}")
-                    inc_data = TushareDataFetcher.get_stock_data(ts_code, inc_start_date, end_date, freq)
+                    now_ts = time.time()
+                    if self._no_update_until.get((ts_code, freq, 'inc'), 0) > now_ts:
+                        inc_data = None
+                    else:
+                        _log(f"[增量更新] {ts_code} {freq}: {inc_start_date} ~ {end_date}")
+                        inc_data = TushareDataFetcher.get_stock_data(ts_code, inc_start_date, end_date, freq)
                     if inc_data:
+                        if local_df is base_df:
+                            local_df = local_df.copy()
                         inc_df = pd.DataFrame(inc_data)
                         local_df = pd.concat([local_df, inc_df]).drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
                         data_changed = True
+                    else:
+                        self._no_update_until[(ts_code, freq, 'inc')] = time.time() + self._no_update_ttl_sec
             
             # 如果有更新，保存回文件
             if data_changed:
                 try:
                     local_df.to_csv(file_path, index=False)
-                    print(f"[持久化] 已更新 {file_path}, 条数: {len(local_df)}")
+                    _log(f"[持久化] 已更新 {file_path}, 条数: {len(local_df)}")
+                    _inc_stat('cache_csv_writes', 1)
+                    try:
+                        file_mtime = os.path.getmtime(file_path)
+                    except Exception:
+                        file_mtime = None
+                    self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
                 except Exception as e:
-                    print(f"[保存失败] {e}")
+                    _log(f"[保存失败] {e}")
 
             # 只有日线数据才补充 pe/pb
             if freq == 'D':
@@ -494,6 +667,8 @@ class CacheManager:
                             fields='trade_date,pe,pb'
                         )
                         if df_basic is not None and not df_basic.empty:
+                            if local_df is base_df:
+                                local_df = local_df.copy()
                             df_basic = df_basic.rename(columns={'trade_date': 'date'})
                             df_basic['date'] = pd.to_datetime(df_basic['date']).dt.strftime('%Y-%m-%d')
                             if 'pe' not in local_df.columns:
@@ -509,32 +684,49 @@ class CacheManager:
                                 merged.drop(columns=['pb_new'], inplace=True)
                             local_df = merged
                             local_df.to_csv(file_path, index=False)
+                            try:
+                                file_mtime = os.path.getmtime(file_path)
+                            except Exception:
+                                file_mtime = None
+                            self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
                 except Exception as e:
-                    print(f"补齐pe/pb失败: {e}")
+                    _log(f"补齐pe/pb失败: {e}")
 
         else:
             # 3. 本地无数据，全量获取
-            print(f"[本地无缓存] 全量获取 {ts_code} {freq}: {start_date} ~ {end_date}")
+            _log(f"[本地无缓存] 全量获取 {ts_code} {freq}: {start_date} ~ {end_date}")
             data = TushareDataFetcher.get_stock_data(ts_code, start_date, end_date, freq)
             if data:
                 local_df = pd.DataFrame(data)
                 try:
                     local_df.to_csv(file_path, index=False)
-                    print(f"[持久化] 已保存 {file_path}, 条数: {len(local_df)}")
+                    _log(f"[持久化] 已保存 {file_path}, 条数: {len(local_df)}")
+                    _inc_stat('cache_csv_writes', 1)
+                    try:
+                        file_mtime = os.path.getmtime(file_path)
+                    except Exception:
+                        file_mtime = None
+                    self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
                 except Exception as e:
-                    print(f"[保存失败] {e}")
+                    _log(f"[保存失败] {e}")
             else:
                 # 尝试备用数据源（仅日线）
                 if freq == 'D':
                     try:
-                        print("尝试使用备用数据源(Eastmoney)...")
+                        _log("尝试使用备用数据源(Eastmoney)...")
                         data = EastmoneyDataFetcher.get_stock_data(ts_code, start_date, end_date)
                         if data:
                             local_df = pd.DataFrame(data)
                             local_df.to_csv(file_path, index=False)
-                            print(f"[持久化] (备用源) 已保存 {file_path}")
+                            _log(f"[持久化] (备用源) 已保存 {file_path}")
+                            _inc_stat('cache_csv_writes', 1)
+                            try:
+                                file_mtime = os.path.getmtime(file_path)
+                            except Exception:
+                                file_mtime = None
+                            self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
                     except Exception as e:
-                        print(f"备用源获取失败: {e}")
+                        _log(f"备用源获取失败: {e}")
 
         # 4. 返回请求区间的数据
         if local_df is not None and not local_df.empty:
@@ -549,6 +741,63 @@ class CacheManager:
             return result_df.where(pd.notnull(result_df), None).to_dict('records')
             
         return []
+
+    def get_latest_quote(self, ts_code, end_date, freq='D', cache_only=True):
+        freq = (freq or 'D').upper()
+        end_date = (end_date or '').strip() or datetime.now().strftime('%Y-%m-%d')
+        freq_suffix = '' if freq == 'D' else f'_{freq}'
+        file_path = os.path.join(self.data_dir, f"{ts_code}{freq_suffix}.csv")
+        mem_cache_key = (ts_code, freq)
+
+        local_df = None
+        file_mtime = None
+        try:
+            if os.path.exists(file_path):
+                file_mtime = os.path.getmtime(file_path)
+        except Exception:
+            file_mtime = None
+
+        cached_entry = self._df_mem_cache.get(mem_cache_key)
+        if cached_entry and cached_entry.get('mtime') == file_mtime:
+            loaded_at = cached_entry.get('loaded_at') or 0
+            if (time.time() - loaded_at) <= self._df_mem_cache_ttl_sec:
+                df = cached_entry.get('df')
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    local_df = df
+                    _inc_stat('cache_df_mem_hits', 1)
+
+        if local_df is None and os.path.exists(file_path):
+            try:
+                local_df = pd.read_csv(file_path, dtype={'date': str})
+                if 'date' in local_df.columns:
+                    local_df = local_df.sort_values('date').drop_duplicates(subset=['date']).reset_index(drop=True)
+                    self._df_mem_cache[mem_cache_key] = {'df': local_df, 'mtime': file_mtime, 'loaded_at': time.time()}
+                    _inc_stat('cache_df_disk_reads', 1)
+                else:
+                    local_df = None
+            except Exception:
+                local_df = None
+
+        if (local_df is None or local_df.empty) and not cache_only:
+            data = self.get_stock_data(ts_code, end_date, end_date, freq)
+            if isinstance(data, list) and data:
+                return data[-1]
+            return None
+
+        if local_df is None or local_df.empty or 'date' not in local_df.columns:
+            return None
+
+        filtered = local_df.loc[local_df['date'] <= end_date]
+        if filtered.empty:
+            return None
+        row = filtered.iloc[-1].to_dict()
+        for k, v in list(row.items()):
+            try:
+                if pd.isna(v):
+                    row[k] = None
+            except Exception:
+                pass
+        return row
     
     def get(self, cache_type, key):
         """获取缓存"""
@@ -583,11 +832,12 @@ class TushareDataFetcher:
             freq: 周期，'D'=日线, 'W'=周线, 'M'=月线
         """
         if pro is None:
-            print("✗ Tushare API未初始化")
+            _log("✗ Tushare API未初始化")
             return None
             
         try:
-            print(f"正在获取 {ts_code} 从 {start_date} 到 {end_date} 的{freq}线数据...")
+            _inc_stat('tushare_fetch_calls', 1)
+            _log(f"正在获取 {ts_code} 从 {start_date} 到 {end_date} 的{freq}线数据...")
             
             # 根据周期选择接口
             if freq == 'W':
@@ -609,10 +859,10 @@ class TushareDataFetcher:
                     end_date=end_date.replace('-', '')
                 )
             
-            print(f"获取到原始数据: {len(df) if df is not None else 'None'} 条")
+            _log(f"获取到原始数据: {len(df) if df is not None else 'None'} 条")
             
             if df is None or df.empty:
-                print("数据为空或None")
+                _log("数据为空或None")
                 return None
             
             # 按日期升序排列
@@ -646,7 +896,7 @@ class TushareDataFetcher:
                     df_basic['date'] = pd.to_datetime(df_basic['date']).dt.strftime('%Y-%m-%d')
                     df = df.merge(df_basic[['date', 'turnover', 'pe', 'pb']], on='date', how='left')
             except Exception as e:
-                print(f"获取换手率数据失败（可能需要更高权限）: {e}")
+                _log(f"获取换手率数据失败（可能需要更高权限）: {e}")
                 # 添加空列作为占位符
                 df['turnover'] = None
                 df['pe'] = None
@@ -1513,16 +1763,104 @@ class StrategyEngine:
             'features': ['突破入场', '趋势过滤', '波动率过滤', '成交量确认', 'ADX强度', '假突破过滤', '风险管理']
         }
     }
+
+    @staticmethod
+    def passes_global_buy_filters(df, i, strategy_name, config, market_state, signal_strength):
+        try:
+            min_strength = float(config.get('minSignalStrength', 0) or 0)
+        except Exception:
+            min_strength = 0
+        if min_strength > 0 and signal_strength < min_strength:
+            return False
+
+        if market_state == 'bear_market' and config.get('blockBuyInBear', False):
+            try:
+                need = float(config.get('minStrengthBear', 70) or 70)
+            except Exception:
+                need = 70
+            if signal_strength < need:
+                return False
+
+        if market_state == 'choppy_market' and config.get('blockBuyInChoppy', False):
+            try:
+                need = float(config.get('minStrengthChoppy', 60) or 60)
+            except Exception:
+                need = 60
+            if signal_strength < need:
+                return False
+
+        apply_trend = config.get('enableTrendFilter', False)
+        if apply_trend and strategy_name in {
+            'deep_fusion',
+            'volume_breakout',
+            'trend_enhanced',
+            'macd_divergence',
+            'momentum_rotation',
+            'turtle_enhanced',
+        }:
+            try:
+                d = df.iloc[i]
+                close = float(d.get('close', 0) or 0)
+                ma20 = d.get('ma20', None)
+                if ma20 is None or pd.isna(ma20):
+                    return True
+                ma20 = float(ma20)
+                if close <= ma20:
+                    return False
+                lookback = int(config.get('trendSlopeLookback', 5) or 5)
+                j = max(0, i - max(2, lookback))
+                ma20_prev = df.iloc[j].get('ma20', None)
+                if ma20_prev is None or pd.isna(ma20_prev):
+                    return True
+                if float(ma20_prev) >= ma20:
+                    return False
+            except Exception:
+                return False
+
+        apply_vol_ratio = config.get('enableVolRatioFilter', False)
+        if apply_vol_ratio and strategy_name in {
+            'deep_fusion',
+            'volume_breakout',
+            'trend_enhanced',
+            'momentum_rotation',
+            'turtle_enhanced',
+        }:
+            try:
+                if 'volume' in df.columns:
+                    cur_vol = float(df.iloc[i].get('volume', 0) or 0)
+                    start = max(0, i - 5)
+                    hist = df['volume'].iloc[start:i]
+                    avg = float(hist.mean()) if len(hist) > 0 else 0
+                    if avg > 0 and cur_vol > 0:
+                        ratio = cur_vol / avg
+                        try:
+                            need = float(config.get('minVolRatio', 1.05) or 1.05)
+                        except Exception:
+                            need = 1.05
+                        if ratio < need:
+                            return False
+            except Exception:
+                pass
+
+        return True
     
     @staticmethod
     def execute_strategy(data, strategy_name, config, stock_features=None):
         """执行策略 - 优化版，支持自适应参数调整"""
         df = pd.DataFrame(data)
+        try:
+            required_cols = {'close', 'high', 'low', 'volume', 'ma20', 'rsi', 'macd', 'macdHist', 'volMa5'}
+            if not required_cols.issubset(set(df.columns)):
+                df = calculate_indicators(df)
+        except Exception:
+            pass
         signals = []
         position = 0
         entry_price = 0
         entry_index = 0
         highest_since_entry = 0
+        highest_body_since_entry = 0.0
+        peak_profit_since_entry = 0.0
         last_sell_index = -999  # 记录上一次卖出的索引
         
         # 分析股票特征并应用自适应参数
@@ -1532,7 +1870,12 @@ class StrategyEngine:
         # 应用自适应参数调整
         config = StockFeatureAnalyzer.get_adaptive_params(config, stock_features)
         
-        buy_cooldown = int(config.get('buyCooldown', 1))  # 买入冷却天数，默认1天
+        buy_cooldown = int(config.get('buyCooldown', 0))  # 买入冷却天数，默认0天
+
+        if 'minConditions' not in config:
+            config['minConditions'] = 2
+        if 'scoreThreshold' not in config:
+            config['scoreThreshold'] = 60
 
         # 获取市场状态（用于动态调整策略参数）
         market_state = 'neutral'
@@ -1554,7 +1897,7 @@ class StrategyEngine:
             d = df.iloc[i]
             prev = df.iloc[i-1]
             
-            if pd.isna(d.get('ma20')) or pd.isna(d.get('rsi')):
+            if d.get('ma20', None) is None or pd.isna(d.get('ma20')) or d.get('rsi', None) is None or pd.isna(d.get('rsi')):
                 continue
             
             buy_signal = False
@@ -1594,52 +1937,63 @@ class StrategyEngine:
                     if config.get('useMacdRising', True):
                         max_score += 25
                         macd_threshold = config.get('macdThreshold', 0)
-                        if d['macd'] and d['macd'] > macd_threshold:
+                        macd_val = d.get('macd', None)
+                        prev_macd = prev.get('macd', None)
+                        if macd_val is not None and not pd.isna(macd_val) and float(macd_val) > macd_threshold:
                             # MACD柱状图上升
-                            if d['macd'] > prev.get('macd', 0):
+                            if prev_macd is not None and not pd.isna(prev_macd) and float(macd_val) > float(prev_macd):
                                 score += 20
                                 confirmations += 1
                             # DIF上穿DEA金叉
-                            if d.get('macdHist') and prev.get('macdHist'):
-                                if d['macdHist'] > 0 and prev['macdHist'] <= 0:
+                            hist = d.get('macdHist', None)
+                            prev_hist = prev.get('macdHist', None)
+                            if hist is not None and prev_hist is not None and not pd.isna(hist) and not pd.isna(prev_hist):
+                                if float(hist) > 0 and float(prev_hist) <= 0:
                                     score += 10  # 金叉加分
                     
                     # 4. RSI超卖条件（可配置开关）- 动态阈值
                     if config.get('useRsiBelow35', True):
                         max_score += 15
                         rsi_threshold = config.get('rsiThreshold', 35)
-                        if d['rsi'] and d['rsi'] < rsi_threshold:
+                        rsi_val = d.get('rsi', None)
+                        if rsi_val is not None and not pd.isna(rsi_val) and float(rsi_val) < rsi_threshold:
                             score += 15
                             confirmations += 1
                             # 严重超卖额外加分
-                            if d['rsi'] < 25:
+                            if float(rsi_val) < 25:
                                 score += 10
                     
                     # 5. 成交量确认条件（可配置开关）- 增强判断
                     if config.get('useVolumeAboveMa', True):
                         max_score += 20
                         vol_multi = config.get('volumeMulti', 1.5)
-                        if d['volume'] and d.get('volMa5') and d['volume'] > d['volMa5'] * vol_multi:
+                        vol_val = d.get('volume', None)
+                        vol_ma5 = d.get('volMa5', None)
+                        if vol_val is not None and vol_ma5 is not None and not pd.isna(vol_val) and not pd.isna(vol_ma5) and float(vol_ma5) > 0 and float(vol_val) > float(vol_ma5) * vol_multi:
                             score += 15
                             confirmations += 1
                             # 成交量持续放大
-                            if d.get('volMa5') and d.get('volMa10') and d['volMa5'] > d['volMa10']:
+                            vol_ma10 = d.get('volMa10', None)
+                            if vol_ma10 is not None and not pd.isna(vol_ma10) and float(vol_ma5) > float(vol_ma10):
                                 score += 5
                     
                     # 6. 布林带位置条件（可配置开关）- 优化判断
                     if config.get('usePriceBelowBoll', True):
                         max_score += 15
-                        if d['close'] and d.get('bollDown') and d['close'] < d['bollDown']:
+                        close_val = d.get('close', None)
+                        boll_down = d.get('bollDown', None)
+                        if close_val is not None and boll_down is not None and not pd.isna(close_val) and not pd.isna(boll_down) and float(close_val) < float(boll_down):
                             score += 15
                             confirmations += 1
                             # 触及下轨且反弹
-                            if d['close'] > d['open']:
+                            if d.get('open', None) is not None and not pd.isna(d.get('open')) and float(close_val) > float(d.get('open')):
                                 score += 5
                     
                     # 7. 新增：ADX趋势强度确认
                     if config.get('useAdxConfirm', True):
                         max_score += 10
-                        if d.get('adx') and d['adx'] > 20:
+                        adx_val = d.get('adx', None)
+                        if adx_val is not None and not pd.isna(adx_val) and float(adx_val) > 20:
                             score += 10
                             if d.get('plus_di') and d.get('minus_di') and d['plus_di'] > d['minus_di']:
                                 score += 5
@@ -1884,15 +2238,18 @@ class StrategyEngine:
                     if config.get('useMacdPositive', True):
                         total_conditions += 1
                         macd_threshold = config.get('macdThreshold', 0)
-                        if d.get('macd') and d['macd'] > macd_threshold:
+                        macd_val = d.get('macd', None)
+                        if macd_val is not None and not pd.isna(macd_val) and float(macd_val) > macd_threshold:
                             conditions_met += 1
                             trend_score += 15
                             # MACD柱状图扩大
-                            if d.get('macdHist') and prev.get('macdHist') and d['macdHist'] > prev['macdHist']:
+                            hist = d.get('macdHist', None)
+                            prev_hist = prev.get('macdHist', None)
+                            if hist is not None and prev_hist is not None and not pd.isna(hist) and not pd.isna(prev_hist) and float(hist) > float(prev_hist):
                                 trend_score += 10
                             # DIF上穿DEA金叉
-                            if d.get('macdHist') and prev.get('macdHist'):
-                                if d['macdHist'] > 0 and prev['macdHist'] <= 0:
+                            if hist is not None and prev_hist is not None and not pd.isna(hist) and not pd.isna(prev_hist):
+                                if float(hist) > 0 and float(prev_hist) <= 0:
                                     trend_score += 15
                     
                     # 4. ADX趋势强度确认（新增）
@@ -2288,10 +2645,13 @@ class StrategyEngine:
                     
                     # 8. MACD动量确认
                     if config.get('useMacdConfirm', True):
-                        if d.get('macd') and d['macd'] > 0:
+                        macd_val = d.get('macd', None)
+                        if macd_val is not None and not pd.isna(macd_val) and float(macd_val) > 0:
                             momentum_score += 10
-                            if d.get('macdHist') and prev.get('macdHist'):
-                                if d['macdHist'] > prev['macdHist']:  # 动量增强
+                            hist = d.get('macdHist', None)
+                            prev_hist = prev.get('macdHist', None)
+                            if hist is not None and prev_hist is not None and not pd.isna(hist) and not pd.isna(prev_hist):
+                                if float(hist) > float(prev_hist):  # 动量增强
                                     momentum_score += 5
                     
                     # 动态买入条件
@@ -2414,65 +2774,212 @@ class StrategyEngine:
                         atr = d.get('atr', abs(d['high'] - d['low']) * 0.5)
                         stop_price = d['close'] - atr * atr_multiplier
             
+            if (not buy_signal) and (not in_cooldown) and position == 0 and config.get('enableTrendReentry', True):
+                if strategy_name in {'trend_enhanced', 'turtle_enhanced', 'momentum_rotation', 'deep_fusion', 'volume_breakout'}:
+                    try:
+                        d0 = df.iloc[i]
+                        d1 = df.iloc[i - 1] if i > 0 else None
+                        ma20 = d0.get('ma20', None)
+                        ma60 = d0.get('ma60', None)
+                        if ma20 is None or ma60 is None or pd.isna(ma20) or pd.isna(ma60):
+                            raise ValueError()
+                        ma20 = float(ma20)
+                        ma60 = float(ma60)
+                        close0 = float(d0.get('close', 0) or 0)
+                        open0 = float(d0.get('open', 0) or 0)
+                        low0 = float(d0.get('low', 0) or 0)
+                        if close0 <= 0:
+                            raise ValueError()
+
+                        lookback = int(config.get('trendSlopeLookback', 5) or 5)
+                        j = max(0, i - max(2, lookback))
+                        ma20_prev = df.iloc[j].get('ma20', None)
+                        if ma20_prev is None or pd.isna(ma20_prev):
+                            raise ValueError()
+                        ma20_prev = float(ma20_prev)
+
+                        uptrend = close0 > ma20 > ma60 and ma20 > ma20_prev
+                        if not uptrend:
+                            raise ValueError()
+
+                        bounced = False
+                        if d1 is not None:
+                            ma20_1 = d1.get('ma20', None)
+                            if ma20_1 is not None and not pd.isna(ma20_1):
+                                ma20_1 = float(ma20_1)
+                                close1 = float(d1.get('close', 0) or 0)
+                                bounced = close1 <= ma20_1 and close0 > ma20 and low0 <= ma20 * 1.01
+                        if not bounced:
+                            bounced = low0 <= ma20 * 1.005 and close0 > open0 and close0 > ma20
+
+                        if not bounced:
+                            raise ValueError()
+
+                        min_rsi = float(config.get('reentryMinRsi', 45) or 45)
+                        rsi = d0.get('rsi', None)
+                        if rsi is not None and not pd.isna(rsi) and float(rsi) < min_rsi:
+                            raise ValueError()
+
+                        vol_need = float(config.get('reentryMinVolRatio', 0.95) or 0.95)
+                        vol_ratio = 1.0
+                        if d0.get('volMa5') and float(d0.get('volMa5') or 0) > 0:
+                            vol_ratio = float(d0.get('volume', 0) or 0) / float(d0.get('volMa5'))
+                        if vol_ratio < vol_need:
+                            raise ValueError()
+
+                        buy_signal = True
+                        signal_strength = max(signal_strength, int(config.get('reentryStrength', 62) or 62))
+                    except Exception:
+                        pass
+
+            if (not buy_signal) and (not in_cooldown) and position == 0 and config.get('enableSwingBottomBuy', True):
+                if strategy_name in {'oversold_rebound', 'bollinger_extreme', 'macd_divergence'}:
+                    try:
+                        rsi = d.get('rsi', None)
+                        if rsi is None or pd.isna(rsi):
+                            raise ValueError()
+                        rsi = float(rsi)
+                        min_rsi = float(config.get('swingBuyRsi', 35) or 35)
+                        if rsi > min_rsi:
+                            raise ValueError()
+
+                        near_low_pct = float(config.get('swingBuyNearLowPct', 2.0) or 2.0) / 100.0
+                        low20 = d.get('low20', None)
+                        if low20 is None or pd.isna(low20):
+                            low20 = float(df['low'].iloc[max(0, i - 19):i + 1].min())
+                        else:
+                            low20 = float(low20)
+                        close0 = float(d.get('close', 0) or 0)
+                        open0 = float(d.get('open', 0) or 0)
+                        vol_ratio = 1.0
+                        if d.get('volMa5') and float(d.get('volMa5') or 0) > 0:
+                            vol_ratio = float(d.get('volume', 0) or 0) / float(d.get('volMa5'))
+                        if close0 <= 0:
+                            raise ValueError()
+                        if close0 > low20 * (1 + near_low_pct):
+                            raise ValueError()
+                        if close0 <= open0:
+                            raise ValueError()
+                        if vol_ratio < float(config.get('swingBuyMinVolRatio', 0.8) or 0.8):
+                            raise ValueError()
+
+                        buy_signal = True
+                        signal_strength = max(signal_strength, int(config.get('swingBuyStrength', 62) or 62))
+                    except Exception:
+                        pass
+
             # 卖出逻辑 - 优化版，支持更多可配置条件
             if position > 0:
                 highest_since_entry = max(highest_since_entry, d['high'])
+                try:
+                    body_high = max(float(d.get('open', 0) or 0), float(d.get('close', 0) or 0))
+                    if body_high > 0:
+                        highest_body_since_entry = max(highest_body_since_entry, body_high)
+                except Exception:
+                    pass
                 hold_days = i - entry_index
                 profit = (d['close'] - entry_price) / entry_price
+                peak_profit_since_entry = max(peak_profit_since_entry, profit)
                 
-                # 止损（可配置开关）
-                if config.get('useStopLoss', True):
+                # 动态止盈（可配置开关）
+                if (not sell_signal) and config.get('useDynamicTP', True):
+                    dtp_threshold = config.get('dynamicTpThreshold', 0.08)
+                    dtp_callback = config.get('dynamicTpCallback', 0.03)
+                    dtp_variation = config.get('dynamicTpVariation', 0.15)
+                    
+                    if peak_profit_since_entry > dtp_threshold:
+                        anchor = highest_body_since_entry if highest_body_since_entry > 0 else highest_since_entry
+                        trail = anchor * (1 - dtp_callback - peak_profit_since_entry * dtp_variation)
+                        if d['close'] < trail:
+                            sell_signal = True
+                            sell_reason = '移动止盈'
+
+                if (not sell_signal) and config.get('useAtrTrail', True):
+                    try:
+                        min_profit = float(config.get('atrTrailMinProfit', 0.06) or 0.06)
+                        atr_mult = float(config.get('atrTrailMult', 2.5) or 2.5)
+                        atr = d.get('atr', None)
+                        if atr is None or pd.isna(atr):
+                            atr = abs(float(d.get('high', 0) or 0) - float(d.get('low', 0) or 0)) * 0.5
+                        atr = float(atr)
+                        if peak_profit_since_entry > min_profit and atr > 0:
+                            trail = highest_since_entry - atr * atr_mult
+                            if float(d.get('close', 0) or 0) < trail:
+                                sell_signal = True
+                                sell_reason = 'ATR跟踪止盈'
+                    except Exception:
+                        pass
+
+                # 止损（可配置开关）- 放在趋势转弱/跟踪之后，避免盈利阶段先被硬止损
+                if (not sell_signal) and config.get('useStopLoss', True):
                     stop_loss_level = config.get('stopLoss', 0.08)
                     if profit <= -stop_loss_level:
                         sell_signal = True
                         sell_reason = '止损'
                 
-                # 止盈（可配置开关）
-                elif config.get('useTakeProfit', True):
-                    take_profit_level = config.get('takeProfit', 0.15)
-                    if profit >= take_profit_level:
-                        sell_signal = True
-                        sell_reason = '止盈'
-                
                 # 跌破MA5（可配置开关）
-                elif config.get('useMa5Sell', True):
-                    if d.get('ma5') and d['close'] < d['ma5'] and profit > 0.02:
+                if (not sell_signal) and config.get('useMa5Sell', True):
+                    if d.get('ma5') and d['close'] < d['ma5'] and peak_profit_since_entry > 0.02:
                         sell_signal = True
                         sell_reason = '跌破MA5'
                 
-                # 动态止盈（可配置开关）
-                elif config.get('useDynamicTP', True):
-                    dtp_threshold = config.get('dynamicTpThreshold', 0.08)
-                    dtp_callback = config.get('dynamicTpCallback', 0.03)
-                    dtp_variation = config.get('dynamicTpVariation', 0.15)
-                    
-                    if profit > dtp_threshold:
-                        trail = highest_since_entry * (1 - dtp_callback - profit * dtp_variation)
-                        if d['close'] < trail:
-                            sell_signal = True
-                            sell_reason = '移动止盈'
-                
                 # MACD死叉（可配置开关）
-                elif config.get('useMacdDeathCross', True):
-                    if d.get('macd') and prev.get('macd') and d['macd'] < 0 and prev['macd'] > 0 and profit > 0:
+                if (not sell_signal) and config.get('useMacdDeathCross', True):
+                    if d.get('macd') and prev.get('macd') and d['macd'] < 0 and prev['macd'] > 0 and peak_profit_since_entry > 0:
                         sell_signal = True
                         sell_reason = 'MACD死叉'
                 
                 # RSI超买（可配置开关）
-                elif config.get('useRsiOverbought', True):
-                    if d.get('rsi') and d['rsi'] > 80 and profit > 0.05:
+                if (not sell_signal) and config.get('useRsiOverbought', True):
+                    if d.get('rsi') and d['rsi'] > 80 and peak_profit_since_entry > 0.05:
                         sell_signal = True
                         sell_reason = 'RSI超买'
+
+                if (not sell_signal) and config.get('enableSwingTopSell', True):
+                    try:
+                        rsi = d.get('rsi', None)
+                        if rsi is None or pd.isna(rsi):
+                            raise ValueError()
+                        rsi = float(rsi)
+                        min_rsi = float(config.get('swingSellRsi', 75) or 75)
+                        if rsi < min_rsi:
+                            raise ValueError()
+
+                        near_high_pct = float(config.get('swingSellNearHighPct', 2.0) or 2.0) / 100.0
+                        high20 = d.get('high20', None)
+                        if high20 is None or pd.isna(high20):
+                            high20 = float(df['high'].iloc[max(0, i - 19):i + 1].max())
+                        else:
+                            high20 = float(high20)
+
+                        close0 = float(d.get('close', 0) or 0)
+                        open0 = float(d.get('open', 0) or 0)
+                        if close0 < high20 * (1 - near_high_pct) or close0 <= 0:
+                            raise ValueError()
+                        if close0 >= open0:
+                            raise ValueError()
+
+                        sell_signal = True
+                        sell_reason = '高位转弱'
+                    except Exception:
+                        pass
+
+                # 止盈（可配置开关）- 放到后面，尽量让利润奔跑
+                if (not sell_signal) and config.get('useTakeProfit', True):
+                    take_profit_level = config.get('takeProfit', 0.25)
+                    if profit >= take_profit_level:
+                        sell_signal = True
+                        sell_reason = '止盈'
                 
                 # 持仓超时（可配置开关）
-                elif config.get('useHoldTimeout', True):
+                if (not sell_signal) and config.get('useHoldTimeout', True):
                     hold_timeout_days = config.get('holdTimeoutDays', 30)
                     if hold_days > hold_timeout_days and profit < 0.05:
                         sell_signal = True
                         sell_reason = '持仓超时'
             
             # 记录信号
-            if buy_signal and position == 0:
+            if buy_signal and position == 0 and StrategyEngine.passes_global_buy_filters(df, i, strategy_name, config, market_state, signal_strength):
                 # 动态仓位管理
                 if config.get('useAdaptPosition', True):
                     # 信号强度越高，仓位越大
@@ -2489,6 +2996,8 @@ class StrategyEngine:
                 entry_price = d['close']
                 entry_index = i
                 highest_since_entry = d['high']
+                peak_profit_since_entry = 0.0
+                highest_body_since_entry = max(float(d.get('open', 0) or 0), float(d.get('close', 0) or 0))
                 
                 signals.append({
                     'index': i,
@@ -3136,6 +3645,76 @@ def api_set_local_state():
     return jsonify({'success': ok, 'key': key})
 
 
+@app.route('/api/clear_cache', methods=['POST'])
+def api_clear_cache():
+    payload = request.get_json(silent=True) or {}
+    scope = (payload.get('scope') or 'all_data').strip().lower()
+    clear_local_state = bool(payload.get('clear_local_state', False))
+
+    removed = {
+        'files': 0,
+        'dirs': 0,
+        'errors': 0,
+    }
+
+    def _rm_file(path):
+        try:
+            if path and os.path.exists(path) and os.path.isfile(path):
+                os.remove(path)
+                removed['files'] += 1
+                return True
+        except Exception:
+            removed['errors'] += 1
+        return False
+
+    def _rm_dir(path, keep_dir=False):
+        try:
+            if not path or not os.path.exists(path) or not os.path.isdir(path):
+                return False
+            if keep_dir:
+                ok = False
+                for name in os.listdir(path):
+                    fp = os.path.join(path, name)
+                    if os.path.isdir(fp):
+                        shutil.rmtree(fp, ignore_errors=True)
+                        removed['dirs'] += 1
+                        ok = True
+                    else:
+                        try:
+                            os.remove(fp)
+                            removed['files'] += 1
+                            ok = True
+                        except Exception:
+                            removed['errors'] += 1
+                return ok
+            shutil.rmtree(path, ignore_errors=True)
+            removed['dirs'] += 1
+            return True
+        except Exception:
+            removed['errors'] += 1
+        return False
+
+    try:
+        cache_manager.stock_cache = {}
+        cache_manager.params_cache = {}
+        cache_manager._df_mem_cache = {}
+        cache_manager._no_update_until = {}
+    except Exception:
+        removed['errors'] += 1
+
+    if scope in ('all', 'all_data', 'data'):
+        _rm_dir(getattr(cache_manager, 'data_dir', None), keep_dir=True)
+        _rm_dir(FUNDAMENTALS_CACHE_DIR, keep_dir=True)
+        _rm_dir(CONCEPT_MEMBERS_CACHE_DIR, keep_dir=True)
+        _rm_file(STOCK_LIST_CACHE_FILE)
+        _rm_file(CONCEPT_LIST_CACHE_FILE)
+
+    if clear_local_state and scope in ('all', 'all_data', 'data'):
+        _rm_dir(LOCAL_STATE_DIR, keep_dir=True)
+
+    return jsonify({'success': True, 'scope': scope, 'removed': removed})
+
+
 @app.route('/api/stock_data', methods=['GET'])
 def api_get_stock_data():
     """获取股票数据（带缓存），支持日线/周线/月线"""
@@ -3143,20 +3722,24 @@ def api_get_stock_data():
     start_date = request.args.get('start_date', '2022-01-01')
     end_date = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
     freq = request.args.get('freq', 'D').upper()  # D=日线, W=周线, M=月线
+    lite = (request.args.get('lite') or '').strip().lower() in ('1', 'true', 'yes', 'y')
+    _inc_stat('stock_data_requests', 1)
+    if lite:
+        _inc_stat('stock_data_lite_requests', 1)
     
     # 验证 freq 参数
     if freq not in ['D', 'W', 'M']:
         freq = 'D'
     
-    print(f"API请求: ts_code={ts_code}, start_date={start_date}, end_date={end_date}, freq={freq}")
+    _log(f"API请求: ts_code={ts_code}, start_date={start_date}, end_date={end_date}, freq={freq}, lite={lite}")
     
     # 使用缓存管理器获取数据
     data = cache_manager.get_stock_data(ts_code, start_date, end_date, freq)
-    print(f"从缓存管理器获取数据结果: {type(data)}, 长度: {len(data) if data else 'None'}")
+    _log(f"从缓存管理器获取数据结果: {type(data)}, 长度: {len(data) if data else 'None'}")
     
     if data is None or (isinstance(data, list) and len(data) == 0):
         # 如果无法获取真实数据，生成模拟数据
-        print(f"真实数据获取失败，生成模拟数据: {ts_code}")
+        _log(f"真实数据获取失败，生成模拟数据: {ts_code}")
         data = TushareDataFetcher.gen_mock_data(ts_code, start_date, end_date)
         
         if data is None or len(data) == 0:
@@ -3175,14 +3758,12 @@ def api_get_stock_data():
     # 补全缺失的换手率（使用成交量估算）
     # df = fill_missing_turnover_with_volume(df)
 
-    # 计算指标
-    df = calculate_indicators(df)
-    
-    # 识别市场状态
-    market_state = identify_market_state(df)
-    
-    # 计算筹码分布
-    chip_data = calculate_chip_distribution(df)
+    market_state = None
+    chip_data = []
+    if not lite:
+        df = calculate_indicators(df)
+        market_state = identify_market_state(df)
+        chip_data = calculate_chip_distribution(df)
     
     # 转换为JSON
     data = df.to_dict(orient='records')
@@ -3204,8 +3785,129 @@ def api_get_stock_data():
         'data_count': len(data),
         'data': data,
         'chip_distribution': chip_data,
-        'cached': True
+        'cached': True,
+        'lite': lite
     })
+
+
+@app.route('/api/fundamentals', methods=['GET'])
+def api_get_fundamentals():
+    ts_code = (request.args.get('ts_code') or '').strip()
+    if not ts_code:
+        return jsonify({'success': False, 'message': 'ts_code 不能为空'}), 400
+
+    max_age_days_raw = (request.args.get('max_age_days') or '7').strip()
+    try:
+        max_age_days = int(max_age_days_raw)
+    except Exception:
+        max_age_days = 7
+    max_age_days = max(0, min(365, max_age_days))
+
+    allow_cache = (request.args.get('cache') or '1').strip() != '0'
+    debug = (request.args.get('debug') or '').strip() == '1'
+
+    safe_code = re.sub(r"[^a-zA-Z0-9_.-]", "_", ts_code)[:50] or 'unknown'
+    cache_file = os.path.join(FUNDAMENTALS_CACHE_DIR, f"{safe_code}.json")
+
+    if allow_cache:
+        cached = _load_json_cache_payload(cache_file)
+        if cached:
+            try:
+                cached_at = datetime.fromisoformat(cached.get('cached_at'))
+                if (datetime.now() - cached_at).days <= max_age_days:
+                    return jsonify({'success': True, 'ts_code': ts_code, 'cached': True, 'data': cached.get('data')})
+            except Exception:
+                pass
+
+    pro_client = _get_pro()
+    if pro_client is None:
+        return jsonify({'success': False, 'message': '未配置Tushare Token，无法获取基本面数据', 'ts_code': ts_code, 'cached': False, 'data': None})
+
+    def _fmt_ymd(v):
+        s = str(v or '').strip()
+        if len(s) == 8 and s.isdigit():
+            return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+        return s
+
+    now = datetime.now()
+    end_ymd = now.strftime('%Y%m%d')
+    fundamentals = {'ts_code': ts_code}
+    sources = {'daily_basic': False, 'fina_indicator': False, 'cashflow': False}
+
+    try:
+        start_basic = (now - timedelta(days=90)).strftime('%Y%m%d')
+        df_basic = pro_client.daily_basic(
+            ts_code=ts_code,
+            start_date=start_basic,
+            end_date=end_ymd,
+            fields='ts_code,trade_date,pe,pb,total_mv,circ_mv,turnover_rate'
+        )
+        if df_basic is not None and not df_basic.empty:
+            df_basic = df_basic.sort_values('trade_date').reset_index(drop=True)
+            row = df_basic.iloc[-1].to_dict()
+            fundamentals.update({
+                'trade_date': _fmt_ymd(row.get('trade_date')),
+                'pe': row.get('pe'),
+                'pb': row.get('pb'),
+                'turnover_rate': row.get('turnover_rate'),
+                'total_mv': row.get('total_mv'),
+                'circ_mv': row.get('circ_mv'),
+            })
+            sources['daily_basic'] = True
+    except Exception as e:
+        if debug:
+            fundamentals['daily_basic_error'] = str(e)
+
+    try:
+        start_fina = (now - timedelta(days=730)).strftime('%Y%m%d')
+        df_fina = pro_client.fina_indicator(
+            ts_code=ts_code,
+            start_date=start_fina,
+            end_date=end_ymd,
+            fields='ts_code,end_date,roe,roe_dt,roa,netprofit_yoy,dt_netprofit_yoy,or_yoy,grossprofit_margin,debt_to_assets'
+        )
+        if df_fina is not None and not df_fina.empty:
+            df_fina = df_fina.sort_values('end_date').reset_index(drop=True)
+            row = df_fina.iloc[-1].to_dict()
+            fundamentals.update({
+                'report_end_date': _fmt_ymd(row.get('end_date')),
+                'roe': row.get('roe'),
+                'roe_dt': row.get('roe_dt'),
+                'roa': row.get('roa'),
+                'netprofit_yoy': row.get('netprofit_yoy'),
+                'dt_netprofit_yoy': row.get('dt_netprofit_yoy'),
+                'or_yoy': row.get('or_yoy'),
+                'grossprofit_margin': row.get('grossprofit_margin'),
+                'debt_to_assets': row.get('debt_to_assets'),
+            })
+            sources['fina_indicator'] = True
+    except Exception as e:
+        if debug:
+            fundamentals['fina_indicator_error'] = str(e)
+
+    try:
+        start_cf = (now - timedelta(days=730)).strftime('%Y%m%d')
+        df_cf = pro_client.cashflow(
+            ts_code=ts_code,
+            start_date=start_cf,
+            end_date=end_ymd,
+            fields='ts_code,end_date,n_cashflow_act'
+        )
+        if df_cf is not None and not df_cf.empty:
+            df_cf = df_cf.sort_values('end_date').reset_index(drop=True)
+            row = df_cf.iloc[-1].to_dict()
+            fundamentals.update({
+                'cashflow_end_date': _fmt_ymd(row.get('end_date')),
+                'n_cashflow_act': row.get('n_cashflow_act'),
+            })
+            sources['cashflow'] = True
+    except Exception as e:
+        if debug:
+            fundamentals['cashflow_error'] = str(e)
+
+    fundamentals['sources'] = sources
+    _save_json_cache_payload(cache_file, fundamentals)
+    return jsonify({'success': True, 'ts_code': ts_code, 'cached': False, 'data': fundamentals})
 
 
 @app.route('/api/index_stocks', methods=['GET'])
@@ -3889,11 +4591,34 @@ def api_auto_optimize_progress():
 # 配置文件路径
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'user_config.json')
+_CONFIG_LOCK = threading.Lock()
 
 def ensure_config_dir():
     """确保配置目录存在"""
     if not os.path.exists(CONFIG_DIR):
         os.makedirs(CONFIG_DIR)
+
+def _atomic_write_json(file_path, data_obj):
+    ensure_config_dir()
+    dir_path = os.path.dirname(file_path)
+    prefix = os.path.basename(file_path) + '.'
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(prefix=prefix, suffix='.tmp', dir=dir_path)
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data_obj, f, ensure_ascii=False, indent=2)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+        os.replace(tmp_path, file_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 @app.route('/api/config', methods=['GET'])
 def api_get_config():
@@ -3901,13 +4626,23 @@ def api_get_config():
     try:
         ensure_config_dir()
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            return jsonify({'success': True, 'config': config})
+            with _CONFIG_LOCK:
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            print(f"[获取配置] 从文件加载: {CONFIG_FILE}, keys: {list(config.keys())}")
+            resp = jsonify({'success': True, 'config': config})
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
         else:
-            return jsonify({'success': True, 'config': {}})
+            print(f"[获取配置] 配置文件不存在: {CONFIG_FILE}")
+            resp = jsonify({'success': True, 'config': {}})
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        print(f"[获取配置] 错误: {e}")
+        resp = jsonify({'success': False, 'message': str(e)})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
 
 @app.route('/api/config', methods=['POST'])
 def api_save_config():
@@ -3915,40 +4650,97 @@ def api_save_config():
     try:
         ensure_config_dir()
         config = request.get_json(silent=True) or {}
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        return jsonify({'success': True, 'message': '配置已保存'})
+        with _CONFIG_LOCK:
+            _atomic_write_json(CONFIG_FILE, config)
+        resp = jsonify({'success': True, 'message': '配置已保存'})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        resp = jsonify({'success': False, 'message': str(e)})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
 
 @app.route('/api/config/export', methods=['GET'])
 def api_export_config():
     """导出配置文件"""
     try:
         if os.path.exists(CONFIG_FILE):
-            return send_file(CONFIG_FILE, as_attachment=True, download_name='quant_config_backup.json')
+            with _CONFIG_LOCK:
+                raw = None
+                try:
+                    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                except json.JSONDecodeError:
+                    with open(CONFIG_FILE, 'r', encoding='utf-8', errors='replace') as f:
+                        raw = f.read()
+                    try:
+                        decoder = json.JSONDecoder()
+                        config, _ = decoder.raw_decode(raw.lstrip())
+                    except Exception:
+                        config = None
+
+            if isinstance(config, dict):
+                ui_key = 'quant_ui_state_v1'
+                ui = config.get(ui_key)
+                if isinstance(ui, dict):
+                    ui = dict(ui)
+                    ui.pop('stockCode', None)
+                    ui.pop('startDate', None)
+                    ui.pop('endDate', None)
+                    config = dict(config)
+                    config[ui_key] = ui
+
+            if config is None:
+                payload_text = raw if isinstance(raw, str) else ''
+                payload = payload_text.encode('utf-8', errors='replace')
+            else:
+                payload = json.dumps(config, ensure_ascii=False, indent=2).encode('utf-8')
+            resp = send_file(
+                io.BytesIO(payload),
+                mimetype='application/json',
+                as_attachment=True,
+                download_name='quant_config_backup.json'
+            )
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
         else:
-            return jsonify({'success': False, 'message': '配置文件不存在'})
+            resp = jsonify({'success': False, 'message': '配置文件不存在'})
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        resp = jsonify({'success': False, 'message': str(e)})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
 
 @app.route('/api/config/import', methods=['POST'])
 def api_import_config():
     """导入配置文件"""
     try:
         if 'file' not in request.files:
-            return jsonify({'success': False, 'message': '未上传文件'})
+            resp = jsonify({'success': False, 'message': '未上传文件'})
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
         file = request.files['file']
         if file.filename == '':
-            return jsonify({'success': False, 'message': '文件名为空'})
+            resp = jsonify({'success': False, 'message': '文件名为空'})
+            resp.headers['Cache-Control'] = 'no-store'
+            return resp
         
         config = json.load(file)
+        print(f"[导入配置] 读取到配置: {list(config.keys())}")
+        
         ensure_config_dir()
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        return jsonify({'success': True, 'message': '配置已导入'})
+        with _CONFIG_LOCK:
+            _atomic_write_json(CONFIG_FILE, config)
+        print(f"[导入配置] 配置已保存到: {CONFIG_FILE}")
+        resp = jsonify({'success': True, 'message': '配置已导入'})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        print(f"[导入配置] 错误: {e}")
+        resp = jsonify({'success': False, 'message': str(e)})
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
 
 
 if __name__ == '__main__':
@@ -3957,4 +4749,5 @@ if __name__ == '__main__':
     print("请确保已设置正确的Tushare Token")
     print("访问: http://localhost:5000")
     print("="*50)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    debug = (os.getenv('FLASK_DEBUG') or '0').strip() == '1'
+    app.run(host='0.0.0.0', port=5000, debug=debug, use_reloader=False)
