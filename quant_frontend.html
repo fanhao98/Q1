@@ -2398,177 +2398,289 @@ html[data-theme="light"] .toggle-slider:before {
 
 /* 手机响应式样式 */
 @media (max-width: 768px) {
+    body {
+        font-size: 12px;
+    }
+    
     .header {
         flex-direction: column;
-        padding: 10px;
-    }
-    
-    .header h1 {
-        font-size: 16px;
-        margin-bottom: 8px;
-    }
-    
-    .header-info {
-        flex-direction: column;
-        align-items: flex-start;
+        padding: 8px 10px;
         gap: 5px;
     }
     
+    .header h1 {
+        font-size: 15px;
+        margin: 0;
+        line-height: 1.3;
+    }
+    
+    .header-info {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+    }
+    
     .header-info span {
-        font-size: 11px;
+        font-size: 10px;
+        white-space: nowrap;
     }
     
     .header-actions {
         width: 100%;
         justify-content: space-between;
-        margin-top: 8px;
+        align-items: center;
+        margin-top: 5px;
+        gap: 8px;
     }
     
     .main-container {
         grid-template-columns: 1fr;
-        padding: 10px;
+        padding: 8px;
+        gap: 8px;
     }
     
     .panel {
-        margin-bottom: 10px;
-        padding: 12px;
+        margin-bottom: 8px;
+        padding: 10px;
+        border-radius: 8px;
     }
     
     .panel-title {
-        font-size: 14px;
-        padding: 8px 0;
+        font-size: 13px;
+        padding: 5px 0;
+        margin-bottom: 8px;
     }
     
     .kline-wrapper {
-        height: 400px !important;
+        height: 380px !important;
+        gap: 0;
     }
     
     .kline-period-selector {
-        gap: 3px;
+        gap: 2px;
     }
     
     .kline-period-selector .period-btn {
-        padding: 3px 8px;
-        font-size: 11px;
+        padding: 3px 6px;
+        font-size: 10px;
+        border-radius: 4px;
     }
     
     .kline-zoom-controls {
-        gap: 5px;
-        padding: 6px;
-    }
-    
-    .zoom-btn {
-        padding: 5px 8px;
-        font-size: 11px;
-        min-width: 50px;
-    }
-    
-    #kline-header-info {
-        font-size: 11px;
-        left: 5px;
-        right: 25%;
-    }
-    
-    #chipChart {
-        width: 25% !important;
-    }
-    
-    .result-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .chart-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .form-row {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .form-group {
-        width: 100%;
-    }
-    
-    .form-group label {
-        font-size: 11px;
-    }
-    
-    .form-group input,
-    .form-group select {
-        font-size: 12px;
-        padding: 6px;
-    }
-    
-    .btn {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-    
-    .tab-btn {
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-    
-    .comparison-table {
-        font-size: 11px;
-    }
-    
-    .comparison-table th,
-    .comparison-table td {
-        padding: 6px 4px;
-    }
-    
-    .help-nav {
-        flex-wrap: wrap;
-        gap: 5px;
-    }
-    
-    .help-nav button {
-        padding: 6px 10px;
-        font-size: 11px;
-    }
-}
-
-@media (max-width: 480px) {
-    .header h1 {
-        font-size: 14px;
-    }
-    
-    .header-info span {
-        font-size: 10px;
-    }
-    
-    .kline-wrapper {
-        height: 350px !important;
-    }
-    
-    .kline-period-selector .period-btn {
-        padding: 2px 6px;
-        font-size: 10px;
+        gap: 4px;
+        padding: 5px;
+        border-top: 1px solid rgba(102, 126, 234, 0.15);
     }
     
     .zoom-btn {
         padding: 4px 6px;
         font-size: 10px;
         min-width: 45px;
+        border-radius: 4px;
+    }
+    
+    #kline-header-info {
+        font-size: 10px;
+        left: 5px;
+        right: 22%;
+        top: 2px;
     }
     
     #chipChart {
-        width: 30% !important;
+        width: 22% !important;
     }
     
-    .panel {
-        padding: 8px;
+    .result-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
     }
     
-    .panel-title {
-        font-size: 13px;
+    .chart-container {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .form-group {
+        width: 100%;
+        margin-bottom: 0;
+    }
+    
+    .form-group label {
+        font-size: 10px;
+        margin-bottom: 3px;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 11px;
+        padding: 5px 8px;
+        border-radius: 4px;
     }
     
     .btn {
         padding: 6px 10px;
         font-size: 11px;
+        border-radius: 4px;
+    }
+    
+    .tab-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+    }
+    
+    .comparison-table {
+        font-size: 10px;
+    }
+    
+    .comparison-table th,
+    .comparison-table td {
+        padding: 4px 3px;
+    }
+    
+    .help-nav {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .help-nav button {
+        padding: 5px 8px;
+        font-size: 10px;
+        border-radius: 4px;
+    }
+    
+    .condition-param-row {
+        grid-template-columns: minmax(70px, 1fr) 80px minmax(0, 70px);
+        column-gap: 6px;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .condition-param-input {
+        width: 70px;
+        max-width: 70px;
+        padding: 3px 5px;
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        font-size: 11px;
+    }
+    
+    .header {
+        padding: 6px 8px;
+    }
+    
+    .header h1 {
+        font-size: 13px;
+    }
+    
+    .header-info {
+        gap: 5px 8px;
+    }
+    
+    .header-info span {
+        font-size: 9px;
+    }
+    
+    .main-container {
+        padding: 6px;
+        gap: 6px;
+    }
+    
+    .panel {
+        padding: 8px;
+        margin-bottom: 6px;
+    }
+    
+    .panel-title {
+        font-size: 12px;
+        padding: 4px 0;
+        margin-bottom: 6px;
+    }
+    
+    .kline-wrapper {
+        height: 320px !important;
+    }
+    
+    .kline-period-selector .period-btn {
+        padding: 2px 5px;
+        font-size: 9px;
+    }
+    
+    .kline-zoom-controls {
+        gap: 3px;
+        padding: 4px;
+    }
+    
+    .zoom-btn {
+        padding: 3px 5px;
+        font-size: 9px;
+        min-width: 40px;
+    }
+    
+    #kline-header-info {
+        font-size: 9px;
+        left: 3px;
+        right: 20%;
+    }
+    
+    #chipChart {
+        width: 20% !important;
+    }
+    
+    .form-group label {
+        font-size: 9px;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 10px;
+        padding: 4px 6px;
+    }
+    
+    .btn {
+        padding: 5px 8px;
+        font-size: 10px;
+    }
+    
+    .tab-btn {
+        padding: 5px 7px;
+        font-size: 10px;
+    }
+    
+    .comparison-table {
+        font-size: 9px;
+    }
+    
+    .comparison-table th,
+    .comparison-table td {
+        padding: 3px 2px;
+    }
+    
+    .condition-param-row {
+        grid-template-columns: minmax(60px, 1fr) 70px minmax(0, 60px);
+        column-gap: 4px;
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+    
+    .condition-param-input {
+        width: 60px;
+        max-width: 60px;
+        padding: 2px 4px;
+        font-size: 9px;
     }
 }
 </style>
@@ -11633,11 +11745,13 @@ TUSHARE_TOKEN=你的token
                     end = Math.min(100, end + zoomOutStep / 2);
                     break;
                 case 'left':
+                    if (start <= 0) return;
                     const leftStep = range * 0.2;
                     start = Math.max(0, start - leftStep);
                     end = Math.min(100, end - leftStep);
                     break;
                 case 'right':
+                    if (end >= 100) return;
                     const rightStep = range * 0.2;
                     start = Math.max(0, start + rightStep);
                     end = Math.min(100, end + rightStep);
