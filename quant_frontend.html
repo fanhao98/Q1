@@ -3759,10 +3759,10 @@ TUSHARE_TOKEN=你的token
                     <div class="panel-title">🎯 筛选条件设置</div>
                     
                     <!-- 第一行：筛选范围和信号时间 -->
-                    <div class="form-row" style="margin-bottom: 10px;">
-                        <div class="form-group" style="flex: 1;">
+                    <div class="form-row" style="display:flex; margin-bottom: 10px; align-items:flex-end; flex-wrap:nowrap; gap:12px; overflow-x:auto;">
+                        <div class="form-group" style="flex: 1 1 260px; min-width: 220px;">
                             <label>筛选范围</label>
-                            <select id="screeningScope" onchange="toggleCustomStockInput()">
+                            <select id="screeningScope" onchange="toggleCustomStockInput()" style="width: 200px;">
                                 <option value="hot">热门股 (Top 10)</option>
                                 <option value="all_a">A股全范围 (所有上市)</option>
                                 <option value="sh">沪市 (SH)</option>
@@ -3770,16 +3770,31 @@ TUSHARE_TOKEN=你的token
                                 <option value="cyb">创业板 (300/301)</option>
                                 <option value="000016.SH">上证50 (真实)</option>
                                 <option value="000300.SH">沪深300 (真实)</option>
+                                <option value="pool">股票池中的股票</option>
                                 <option value="custom">自选股</option>
                             </select>
                             <div id="customStockInputGroup" style="display:none; margin-top: 5px;">
                                 <input type="text" id="customStockInput" class="form-control" placeholder="代码逗号分隔..." style="width: 100%;">
                             </div>
                         </div>
+
+                        <div class="form-group" style="flex: 0 0 auto; min-width: 200px;">
+                            <label style="opacity:0; height: 18px; margin: 0;">过滤</label>
+                            <div style="display:flex; gap:12px; align-items:center; height: 32px; flex-wrap:nowrap; white-space:nowrap;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#bbb; cursor:pointer; user-select:none; white-space:nowrap;">
+                                    <input type="checkbox" id="excludeStarMarket" checked>
+                                    剔除科创板
+                                </label>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#bbb; cursor:pointer; user-select:none; white-space:nowrap;">
+                                    <input type="checkbox" id="excludeStStocks" checked>
+                                    剔除ST
+                                </label>
+                            </div>
+                        </div>
                         
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group" style="flex: 0 0 200px; min-width: 200px;">
                             <label>信号时间</label>
-                            <select id="signalPeriod">
+                            <select id="signalPeriod" style="width: 200px;">
                                 <option value="1">最近1天</option>
                                 <option value="3" selected>最近3天</option>
                                 <option value="5">最近5天</option>
@@ -3905,6 +3920,10 @@ TUSHARE_TOKEN=你的token
                                 <label style="font-size: 11px; color: #aaa; display:flex; align-items:center; gap:6px; white-space:nowrap; flex:0 0 auto;">
                                     经营现金流≥
                                     <input id="fundMinOcf" type="number" value="0" step="0.01" style="width:90px; padding:4px; border:1px solid #444; border-radius:4px; background:#1f1f1f; color:#ddd;">
+                                </label>
+                                <label style="font-size: 11px; color: #aaa; display:flex; align-items:center; gap:6px; white-space:nowrap; flex:0 0 auto; cursor:pointer; user-select:none;">
+                                    <input type="checkbox" id="fundAllowNoData" checked>
+                                    无数据放行
                                 </label>
                             </div>
                         </div>
@@ -4255,6 +4274,26 @@ TUSHARE_TOKEN=你的token
                 return s.startsWith('688') || s.startsWith('689');
             }
 
+            function isStStock(name) {
+                const t = String(name || '').trim().toUpperCase();
+                if (!t) return false;
+                return t.includes('ST');
+            }
+
+            function applyScopeExclusions(stockList, options) {
+                const excludeStar = !!options?.excludeStar;
+                const excludeSt = !!options?.excludeSt;
+                if (!excludeStar && !excludeSt) return stockList;
+                return (stockList || []).filter(stock => {
+                    const tsCode = stock?.ts_code || stock?.tsCode || '';
+                    const symbol = stock?.symbol || (tsCode.split('.')[0] || '');
+                    const name = stock?.name || '';
+                    if (excludeStar && isStarMarketStock(tsCode, symbol)) return false;
+                    if (excludeSt && isStStock(name)) return false;
+                    return true;
+                });
+            }
+
             function toggleIndustryFilter() {
                 const enabled = document.getElementById('enableIndustryFilter').checked;
                 const input = document.getElementById('screeningIndustry');
@@ -4482,7 +4521,7 @@ TUSHARE_TOKEN=你的token
 
             async function checkFundamentalsForStock(tsCode, criteria) {
                 if (!criteria?.enabled) return true;
-                if (fundamentalsApiUnavailable) return false;
+                if (fundamentalsApiUnavailable) return !!criteria?.allowNoData;
                 let f = null;
                 try {
                     f = await fetchFundamentals(tsCode);
@@ -4494,10 +4533,10 @@ TUSHARE_TOKEN=你的token
                         fundamentalsApiWarned = true;
                         showNotification(`⚠️ 基本面数据接口不可用${extra}，本次筛选将按“不通过基本面过滤”处理`, 'warning');
                     }
-                    return false;
+                    return !!criteria?.allowNoData;
                 }
                 if (f === null) {
-                    return false;
+                    return !!criteria?.allowNoData;
                 }
                 return passesFundamentalCriteria(f, criteria);
             }
@@ -4511,6 +4550,8 @@ TUSHARE_TOKEN=你的token
                 updateScreeningControlUi();
                 const scope = document.getElementById('screeningScope').value;
                 const period = parseInt(document.getElementById('signalPeriod').value);
+                const excludeStar = document.getElementById('excludeStarMarket')?.checked !== false;
+                const excludeSt = document.getElementById('excludeStStocks')?.checked !== false;
                 const smartVerification = document.getElementById('enableSmartVerification').checked; // 获取智能验证开关状态
                 const initCapital = parseFloat(document.getElementById('initCapital').value) * 10000;
                 const smartMinScore = Number(document.getElementById('smartMinScore')?.value ?? 0) || 0;
@@ -4528,7 +4569,8 @@ TUSHARE_TOKEN=你的token
                     maxPe: Number(document.getElementById('fundMaxPe')?.value ?? 0) || 0,
                     maxPb: Number(document.getElementById('fundMaxPb')?.value ?? 0) || 0,
                     maxDebtToAssets: Number(document.getElementById('fundMaxDebtToAssets')?.value ?? 0) || 0,
-                    minOcf: Number(document.getElementById('fundMinOcf')?.value ?? 0)
+                    minOcf: Number(document.getElementById('fundMinOcf')?.value ?? 0),
+                    allowNoData: !!document.getElementById('fundAllowNoData')?.checked
                 };
                 const selectedStrategies = Array.from(document.querySelectorAll('#screeningStrategyGrid .strategy-card.active'))
                     .map(card => card.dataset.strategy);
@@ -4572,6 +4614,18 @@ TUSHARE_TOKEN=你的token
                             name: code.trim(),
                             symbol: code.split('.')[0] 
                         }));
+                    } else if (scope === 'pool') {
+                        const pool = Array.from(stockPool.values());
+                        if (!pool || pool.length === 0) {
+                            alert('股票池为空，请先在“股票池”页添加股票');
+                            progressContainer.classList.remove('active');
+                            return;
+                        }
+                        stockList = pool.map(x => ({
+                            ts_code: normalizeTsCode(x.ts_code || x.tsCode || x.code || '') || (x.ts_code || x.tsCode || x.code || ''),
+                            name: x.name || x.ts_code || x.tsCode || x.code || '',
+                            symbol: (x.symbol || ((x.ts_code || x.tsCode || x.code || '').split('.')[0])) || ''
+                        })).filter(x => x.ts_code);
                     } else if (scope === 'hot') {
                         // 热门股列表
                         stockList = [
@@ -4607,7 +4661,7 @@ TUSHARE_TOKEN=你的token
                             const symbol = stock.symbol || tsCode.split('.')[0] || '';
 
                             if (scope === 'all_a') {
-                                return !isStarMarketStock(tsCode, symbol);
+                                return true;
                             }
                             
                             if (scope === 'sh') {
@@ -4648,6 +4702,8 @@ TUSHARE_TOKEN=你的token
                         { ts_code: '600519.SH', name: '贵州茅台' }
                     ];
                 }
+
+                stockList = applyScopeExclusions(stockList, { excludeStar, excludeSt });
 
                 // === 新增：行业和概念过滤 (多选) ===
                 const industryEnabled = document.getElementById('enableIndustryFilter').checked;
@@ -6413,6 +6469,8 @@ TUSHARE_TOKEN=你的token
                     screeningScope: document.getElementById('screeningScope')?.value || '',
                     signalPeriod: document.getElementById('signalPeriod')?.value || '',
                     customStockInput: document.getElementById('customStockInput')?.value || '',
+                    excludeStarMarket: !!document.getElementById('excludeStarMarket')?.checked,
+                    excludeStStocks: !!document.getElementById('excludeStStocks')?.checked,
                     enableSmartVerification: !!document.getElementById('enableSmartVerification')?.checked,
                     enableFundamentalFilter: !!document.getElementById('enableFundamentalFilter')?.checked,
                     fundMinRoe: document.getElementById('fundMinRoe')?.value ?? '',
@@ -6547,6 +6605,11 @@ TUSHARE_TOKEN=你的token
             const customEl = document.getElementById('customStockInput');
             if (customEl && state.customStockInput !== undefined) customEl.value = state.customStockInput;
 
+            const excludeStarEl = document.getElementById('excludeStarMarket');
+            if (excludeStarEl && state.excludeStarMarket !== undefined) excludeStarEl.checked = !!state.excludeStarMarket;
+            const excludeStEl = document.getElementById('excludeStStocks');
+            if (excludeStEl && state.excludeStStocks !== undefined) excludeStEl.checked = !!state.excludeStStocks;
+
             const smartEl = document.getElementById('enableSmartVerification');
             if (smartEl && state.enableSmartVerification !== undefined) smartEl.checked = !!state.enableSmartVerification;
             if (typeof toggleSmartVerificationOptions === 'function') toggleSmartVerificationOptions();
@@ -6579,6 +6642,8 @@ TUSHARE_TOKEN=你的token
                 if (state.fundMinOcf !== undefined) fundMinOcfEl.value = state.fundMinOcf;
                 else if (state.fundRequirePositiveOcf) fundMinOcfEl.value = 0;
             }
+            const fundAllowNoDataEl = document.getElementById('fundAllowNoData');
+            if (fundAllowNoDataEl && state.fundAllowNoData !== undefined) fundAllowNoDataEl.checked = !!state.fundAllowNoData;
 
             const indEl = document.getElementById('enableIndustryFilter');
             if (indEl && state.enableIndustryFilter !== undefined) {
