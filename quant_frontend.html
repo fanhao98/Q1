@@ -1744,6 +1744,39 @@ body {
     color: white;
 }
 
+/* K线缩放按钮样式 */
+.kline-zoom-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.zoom-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 60px;
+}
+
+.zoom-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--hover-bg);
+}
+
+.zoom-btn:active {
+    transform: scale(0.95);
+}
+
 html[data-theme="dark"] .panel {
     box-shadow: 0 12px 30px rgba(0,0,0,0.35) !important;
 }
@@ -2361,6 +2394,182 @@ html[data-theme="light"] .toggle-slider:before {
 
 #kline-header-info {
     color: var(--text-muted) !important;
+}
+
+/* 手机响应式样式 */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        padding: 10px;
+    }
+    
+    .header h1 {
+        font-size: 16px;
+        margin-bottom: 8px;
+    }
+    
+    .header-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .header-info span {
+        font-size: 11px;
+    }
+    
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 8px;
+    }
+    
+    .main-container {
+        grid-template-columns: 1fr;
+        padding: 10px;
+    }
+    
+    .panel {
+        margin-bottom: 10px;
+        padding: 12px;
+    }
+    
+    .panel-title {
+        font-size: 14px;
+        padding: 8px 0;
+    }
+    
+    .kline-wrapper {
+        height: 400px !important;
+    }
+    
+    .kline-period-selector {
+        gap: 3px;
+    }
+    
+    .kline-period-selector .period-btn {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+    
+    .kline-zoom-controls {
+        gap: 5px;
+        padding: 6px;
+    }
+    
+    .zoom-btn {
+        padding: 5px 8px;
+        font-size: 11px;
+        min-width: 50px;
+    }
+    
+    #kline-header-info {
+        font-size: 11px;
+        left: 5px;
+        right: 25%;
+    }
+    
+    #chipChart {
+        width: 25% !important;
+    }
+    
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .form-group {
+        width: 100%;
+    }
+    
+    .form-group label {
+        font-size: 11px;
+    }
+    
+    .form-group input,
+    .form-group select {
+        font-size: 12px;
+        padding: 6px;
+    }
+    
+    .btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .tab-btn {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+    
+    .comparison-table {
+        font-size: 11px;
+    }
+    
+    .comparison-table th,
+    .comparison-table td {
+        padding: 6px 4px;
+    }
+    
+    .help-nav {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .help-nav button {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header h1 {
+        font-size: 14px;
+    }
+    
+    .header-info span {
+        font-size: 10px;
+    }
+    
+    .kline-wrapper {
+        height: 350px !important;
+    }
+    
+    .kline-period-selector .period-btn {
+        padding: 2px 6px;
+        font-size: 10px;
+    }
+    
+    .zoom-btn {
+        padding: 4px 6px;
+        font-size: 10px;
+        min-width: 45px;
+    }
+    
+    #chipChart {
+        width: 30% !important;
+    }
+    
+    .panel {
+        padding: 8px;
+    }
+    
+    .panel-title {
+        font-size: 13px;
+    }
+    
+    .btn {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
 }
 </style>
 </head>
@@ -3718,7 +3927,15 @@ TUSHARE_TOKEN=你的token
                     </div>
                     <div class="kline-wrapper" style="display: flex; height: 580px; width: 100%; position: relative;">
                         <div id="kline-header-info" style="position: absolute; top: 0px; left: 10px; right: 20%; z-index: 100; pointer-events: none; font-size: 14px; line-height: 1.2; color: #ccc;"></div>
-                        <div id="klineChart" style="width: 80%; height: 100%;"></div>
+                        <div style="flex: 1; display: flex; flex-direction: column; height: 100%;">
+                            <div id="klineChart" style="flex: 1; width: 100%;"></div>
+                            <div class="kline-zoom-controls" style="display: flex; justify-content: center; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(102, 126, 234, 0.2);">
+                                <button type="button" class="zoom-btn" onclick="zoomKline('left')" title="左移">◀ 左移</button>
+                                <button type="button" class="zoom-btn" onclick="zoomKline('out')" title="缩小">➖ 缩小</button>
+                                <button type="button" class="zoom-btn" onclick="zoomKline('in')" title="放大">➕ 放大</button>
+                                <button type="button" class="zoom-btn" onclick="zoomKline('right')" title="右移">右移 ▶</button>
+                            </div>
+                        </div>
                         <div id="chipChart" style="width: 20%; height: 100%; border-left: 1px solid rgba(102, 126, 234, 0.2); background: rgba(0,0,0,0.1);"></div>
                     </div>
                 </div>
@@ -11392,6 +11609,50 @@ TUSHARE_TOKEN=你的token
             }
         }
 
+        // K线缩放控制函数
+        function zoomKline(action) {
+            if (!charts || !charts.kline) return;
+            
+            const option = charts.kline.getOption();
+            const dz = option?.dataZoom?.[0];
+            if (!dz) return;
+            
+            let start = dz.start || 0;
+            let end = dz.end || 100;
+            const range = end - start;
+            
+            switch (action) {
+                case 'in':
+                    const zoomInStep = range * 0.2;
+                    start += zoomInStep / 2;
+                    end -= zoomInStep / 2;
+                    break;
+                case 'out':
+                    const zoomOutStep = range * 0.25;
+                    start = Math.max(0, start - zoomOutStep / 2);
+                    end = Math.min(100, end + zoomOutStep / 2);
+                    break;
+                case 'left':
+                    const leftStep = range * 0.2;
+                    start = Math.max(0, start - leftStep);
+                    end = Math.min(100, end - leftStep);
+                    break;
+                case 'right':
+                    const rightStep = range * 0.2;
+                    start = Math.max(0, start + rightStep);
+                    end = Math.min(100, end + rightStep);
+                    break;
+            }
+            
+            charts.kline.setOption({
+                dataZoom: [
+                    { start, end }
+                ]
+            });
+            
+            persistKlineZoomStateFromChart();
+        }
+
         function updateKlineChart() {
             const strategy = document.getElementById('detailStrategy').value;
             const result = strategyResults[strategy];
@@ -11611,34 +11872,7 @@ TUSHARE_TOKEN=你的token
                         { scale: true, gridIndex: 1, axisLabel: { color: '#888', formatter: v => (v/10000).toFixed(0) + '万' }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#444' } } }
                     ],
                     dataZoom: [
-                        { type: 'inside', xAxisIndex: [0,1], start: zoomStart, end: zoomEnd, zoomOnMouseWheel: false, moveOnMouseWheel: false },
-                        { 
-                            show: true, 
-                            xAxisIndex: [0,1], 
-                            type: 'slider', 
-                            start: zoomStart,
-                            end: zoomEnd,
-                            bottom: 5, 
-                            height: 25, // 增加高度，更容易点击
-                            handleSize: '120%', // 增大两端手柄大小
-                            handleStyle: {
-                                color: '#667eea', // 设置手柄颜色，更明显
-                                shadowBlur: 3,
-                                shadowColor: 'rgba(0, 0, 0, 0.6)',
-                                shadowOffsetX: 2,
-                                shadowOffsetY: 2
-                            },
-                            textStyle: { color: '#ccc' }, // 文字颜色
-                            borderColor: '#444', // 边框颜色
-                            dataBackground: { // 数据背景区域样式
-                                lineStyle: { color: '#555' },
-                                areaStyle: { color: '#333' }
-                            },
-                            selectedDataBackground: { // 选中区域样式
-                                lineStyle: { color: '#667eea' },
-                                areaStyle: { color: 'rgba(102, 126, 234, 0.2)' }
-                            }
-                        }
+                        { type: 'inside', xAxisIndex: [0,1], start: zoomStart, end: zoomEnd, zoomOnMouseWheel: false, moveOnMouseWheel: false }
                     ],
                     series: [
                         {
