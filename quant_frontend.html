@@ -2430,6 +2430,8 @@ html[data-theme="light"] .toggle-slider:before {
         flex-wrap: wrap;
         align-items: center;
         gap: 6px 10px;
+        width: 100%;
+        justify-content: space-between;
     }
     
     .header-info span {
@@ -2633,6 +2635,8 @@ html[data-theme="light"] .toggle-slider:before {
     
     .header-info {
         gap: 4px 6px;
+        width: 100%;
+        justify-content: space-between;
     }
     
     .header-info span {
@@ -12540,7 +12544,7 @@ TUSHARE_TOKEN=你的token
                     {
                         type: 'group',
                         left: isMobile ? 5 : 10,
-                        bottom: isMobile ? 10 : 30,
+                        bottom: isMobile ? 5 : 30,
                         children: [
                             {
                                 type: 'text',
@@ -12549,9 +12553,13 @@ TUSHARE_TOKEN=你的token
                                 top: 0,
                                 style: {
                                     text: isMobile ? [
-                                        `${currentDate} 获利:${profitRatio}% 成本:${avgCostText}`,
-                                        `压:${maxVolAbovePrice !== null ? maxVolAbovePrice.toFixed(2) : '--'} 支:${maxVolBelowPrice !== null ? maxVolBelowPrice.toFixed(2) : '--'}`,
-                                        `C90:${c90.ratio}% C70:${c70.ratio}%`
+                                        `日期:${currentDate}`,
+                                        `获利:${profitRatio}%`,
+                                        `成本:${avgCostText}`,
+                                        `压力:${maxVolAbovePrice !== null ? maxVolAbovePrice.toFixed(2) : '--'}`,
+                                        `支撑:${maxVolBelowPrice !== null ? maxVolBelowPrice.toFixed(2) : '--'}`,
+                                        `C90:${c90.ratio}%`,
+                                        `C70:${c70.ratio}%`
                                     ].join('\n') : [
                                         `日期: ${currentDate}`,
                                         `获利比例: ${profitRatio}%`,
@@ -12565,7 +12573,7 @@ TUSHARE_TOKEN=你的token
                                     fill: chipTextColor,
                                     stroke: chipTextStroke,
                                     lineWidth: isMobile ? 1 : 2,
-                                    lineHeight: isMobile ? 14 : 16,
+                                    lineHeight: isMobile ? 12 : 16,
                                     shadowBlur: 1,
                                     shadowColor: isLightTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.8)'
                                 }
