@@ -43,6 +43,7 @@
 
         (function loadECharts() {
             const sources = [
+                './echarts.min.js',
                 'https://unpkg.com/echarts@5/dist/echarts.min.js',
                 'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js'
             ];
@@ -79,6 +80,7 @@
                     triggerInitCharts();
                 };
                 script.onerror = () => {
+                    console.warn('⚠️ ECharts加载失败，尝试下一个源:', src);
                     tryLoad(index + 1);
                 };
                 document.head.appendChild(script);
@@ -1301,8 +1303,8 @@
             font-weight: bold;
         }
 
-        .positive { color: #ff4757; }
-        .negative { color: #2ed573; }
+        .positive { color: #ff3333; font-weight: bold; }
+        .negative { color: #00e676; font-weight: bold; }
         .neutral { color: #ffa502; }
 
         /* 表格 */
@@ -1748,16 +1750,6 @@ body {
 }
 
 /* K线缩放按钮样式 */
-.kline-zoom-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    padding: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    border-top: 1px solid rgba(102, 126, 234, 0.2);
-}
-
 .zoom-btn {
     padding: 6px 12px;
     font-size: 12px;
@@ -1778,6 +1770,48 @@ body {
 
 .zoom-btn:active {
     transform: scale(0.95);
+}
+
+/* K线控制按钮样式 */
+.kline-ctrl-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 500;
+}
+
+.kline-ctrl-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--hover-bg);
+}
+
+.kline-ctrl-btn:active {
+    transform: scale(0.95);
+}
+
+.kline-ctrl-btn span {
+    font-size: 14px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .kline-ctrl-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    
+    .kline-ctrl-btn span {
+        font-size: 12px;
+    }
 }
 
 html[data-theme="dark"] .panel {
@@ -2491,20 +2525,6 @@ html[data-theme="light"] .toggle-slider:before {
         white-space: nowrap;
     }
     
-    .kline-zoom-controls {
-        gap: 3px;
-        padding: 4px;
-        border-top: 1px solid rgba(102, 126, 234, 0.15);
-    }
-    
-    .zoom-btn {
-        padding: 3px 5px;
-        font-size: 10px;
-        min-width: 40px;
-        border-radius: 3px;
-        white-space: nowrap;
-    }
-    
     #kline-header-info {
         font-size: 10px;
         left: 4px;
@@ -2668,17 +2688,6 @@ html[data-theme="light"] .toggle-slider:before {
         font-size: 9px;
     }
     
-    .kline-zoom-controls {
-        gap: 2px;
-        padding: 3px;
-    }
-    
-    .zoom-btn {
-        padding: 2px 4px;
-        font-size: 9px;
-        min-width: 35px;
-    }
-    
     #kline-header-info {
         font-size: 9px;
         left: 3px;
@@ -2742,6 +2751,53 @@ html[data-theme="light"] .toggle-slider:before {
         padding: 2px 3px;
         font-size: 9px;
     }
+}
+
+/* 卖出信号动画 */
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+.sell-signal-badge {
+    animation: pulse 2s infinite;
+    font-weight: bold;
+}
+
+.sell-signal-row {
+    background: rgba(255, 71, 87, 0.1) !important;
+    border-left: 4px solid #ff4757;
+}
+
+.sell-signal-row:hover {
+    background: rgba(255, 71, 87, 0.2) !important;
+}
+
+/* Toast动画 */
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+/* 股票池实时更新指示器 */
+.pool-update-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #2ed573;
+    border-radius: 50%;
+    margin-left: 5px;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
 }
 </style>
 </head>
@@ -3171,10 +3227,10 @@ TUSHARE_TOKEN=你的token
                             </div>
 
                             <div class="help-card">
-                                <h3>🌲 机器学习（random_forest_ml）</h3>
+                                <h3>🚀 XGBoost机器学习（xgboost_ml）</h3>
                                 <div class="help-callout good">
                                     <div style="font-size:12px;color:var(--text);font-weight:700;margin-bottom:6px;">核心思想</div>
-                                    <p style="margin:0;">用历史数据训练一个“上涨概率预测器”。它不会告诉你“涨多少”，而是输出“未来 N 天涨幅超过阈值的概率”。概率达到门槛后，再用放量/趋势做确认，降低纯模型噪声。</p>
+                                    <p style="margin:0;">基于梯度提升决策树的集成学习算法。通过多棵决策树的投票/加权，从历史数据中学习特征与涨跌的非线性关系，输出上涨概率预测。结合趋势过滤、成交量确认等多重条件，降低单一模型过拟合风险。</p>
                                 </div>
                                 <div style="font-size:12px;color:var(--text);font-weight:700;margin:10px 0 6px;">关键参数解释</div>
                                 <ul style="margin:0; padding-left:16px;">
@@ -3281,8 +3337,9 @@ TUSHARE_TOKEN=你的token
                                     </ul>
                                 </details>
                                 <details style="margin-top:10px;">
-                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🌲 机器学习（random_forest_ml）：概率过滤 + 条件确认</summary>
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🚀 XGBoost机器学习（xgboost_ml）：梯度提升决策树集成</summary>
                                     <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：基于梯度提升决策树（GBDT）的集成学习算法，通过多轮迭代训练决策树，每棵树学习前一棵树的残差，最终加权组合多棵树预测结果。</li>
                                         <li>训练窗口 rfLookback：180～300；预测周期 rfHorizon：5～20。</li>
                                         <li>收益阈值 rfReturnThreshold：3%～8% 更常用（阈值越高正样本越少，模型更难学）。</li>
                                         <li>树数量 rfTrees：15～40；最大深度 rfMaxDepth：2～4（过大易过拟合）。</li>
@@ -3292,6 +3349,78 @@ TUSHARE_TOKEN=你的token
                                         <li>趋势过滤 rfTrendMode：0=关；1=收盘&gt;MA20；2=收盘&gt;MA20 且 MA20&gt;=MA60 且 MA20 上行。</li>
                                         <li>最大跳空 rfMaxGapPct：5%～10%，用于避免追高跳空。</li>
                                         <li>最大波动 rfMaxAtrPct：8%～15%，用于过滤极端高波动阶段。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🔀 Stacking集成（stacking_ml）：多层模型元学习</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：Stacking（堆叠集成）是一种双层集成学习方法。第一层使用多个基学习器（如趋势评分、成交量评分、ML指标评分、动量评分）分别预测，第二层使用元学习器（逻辑回归或加权平均）综合各基学习器的输出，得到最终预测结果。</li>
+                                        <li>最小概率阈值 stackingMinProb：0.30～0.50，控制信号触发门槛。</li>
+                                        <li>趋势权重 stackingTrendWeight：0.1～0.5，趋势评分在最终决策中的权重。</li>
+                                        <li>成交量权重 stackingVolumeWeight：0.1～0.5，成交量评分权重。</li>
+                                        <li>ML指标权重 stackingMlWeight：0.1～0.6，机器学习指标评分权重。</li>
+                                        <li>动量权重 stackingMomentumWeight：0.0～0.3，动量评分权重。</li>
+                                        <li>严格过滤 stackingUseStrictFilter：开启后会增加跳空和波动率过滤条件。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🌌 CNN-LSTM-Transformer（cnn_lstm_transformer）：多架构深度学习融合</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：融合三种深度学习架构的优势——CNN（卷积神经网络）提取局部特征和KDJ/量价模式，LSTM捕捉时间序列长期依赖，Transformer处理长程依赖和注意力机制。通过加权融合三种模型的评分，综合判断买卖时机。</li>
+                                        <li>最小概率阈值 cnnLstmTransformerMinProb：0.20～0.50，控制信号触发门槛。</li>
+                                        <li>CNN权重 cnnWeight：0.1～0.5，CNN模型评分权重，侧重KDJ和量价特征。</li>
+                                        <li>LSTM权重 lstmWeight：0.1～0.5，LSTM模型评分权重，侧重启势和RSI。</li>
+                                        <li>Transformer权重 transformerWeight：0.1～0.5，Transformer模型评分权重，侧重价格变化和布林带。</li>
+                                        <li>趋势权重 cnnLstmTransformerTrendWeight：0.0～0.3，趋势确认在最终决策中的权重。</li>
+                                        <li>严格过滤 cnnLstmTransformerUseStrictFilter：开启后会增加更严格的过滤条件。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🧠 LSTM深度学习（lstm_ml）：循环神经网络时序建模</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：基于长短期记忆网络（LSTM），通过门控机制学习价格序列的长期依赖关系，捕捉时间序列中的隐藏模式。</li>
+                                        <li>训练窗口 lstmLookback：180～300；预测周期 lstmHorizon：10～20。</li>
+                                        <li>序列长度 lstmSeqLen：20～40，决定LSTM看多长的历史。</li>
+                                        <li>LSTM单元数 lstmUnits：64～128；层数 lstmLayers：1～2。</li>
+                                        <li>学习率 lstmLearningRate：0.0001～0.001，越小越稳但训练慢。</li>
+                                        <li>训练轮数 lstmEpochs：100～200；批次大小 lstmBatchSize：32～64。</li>
+                                        <li>Dropout比率 lstmDropout：0.3～0.5，防止过拟合。</li>
+                                        <li>买入概率阈值 lstmMinProb：0.55～0.70，越高越谨慎。</li>
+                                        <li>双向LSTM lstmUseBidirectional：开启可捕捉前后依赖关系，效果更好但计算量翻倍。</li>
+                                        <li>标签阈值 labelThreshold：2%～5%，定义正样本的涨幅要求。</li>
+                                        <li>损失阈值 lossThreshold：-3%～-1%，定义负样本的跌幅要求。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🎭 混合机器学习（ensemble_ml）：XGBoost+LSTM加权融合</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：将XGBoost（表格特征学习）与LSTM（时序模式学习）的预测结果进行加权融合，结合两种模型的优势，提高预测的稳定性和准确性。</li>
+                                        <li>训练窗口 ensembleLookback：180～300；预测周期 ensembleHorizon：10～20。</li>
+                                        <li>序列长度 ensembleSeqLen：20～40。</li>
+                                        <li>XGBoost权重 xgbWeight：0.3～0.7；LSTM权重 lstmWeight：0.3～0.7。</li>
+                                        <li>建议XGBoost权重略高（如0.6），LSTM权重略低（如0.4），因为XGBoost在表格特征上更稳定。</li>
+                                        <li>其他参数继承自xgboost_ml和lstm_ml，可分别调整。</li>
+                                        <li>混合策略通常比单一模型更稳定，适合追求稳健收益的场景。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🎯 MTSF-Net多尺度融合（mtsf_net）：多尺度时序特征融合网络</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：基于多尺度时序特征融合网络（MTSF-Net），通过并行提取不同时间尺度的特征（短期、中期、长期），融合多维度信息，捕捉复杂的市场模式。</li>
+                                        <li>回望周期 mtsfLookback：20～60，决定模型观察的历史数据长度。越长越稳但更慢。</li>
+                                        <li>重训间隔 mtsfRetrainInterval：15～30，控制模型重新训练的频率。市场风格变化快时可适当缩短。</li>
+                                        <li>最小概率阈值 mtsfMinProb：0.50～0.60，控制信号触发门槛。越高越谨慎，信号越少但更稳。</li>
+                                        <li>适合中等频率交易，建议配合趋势过滤使用。</li>
+                                    </ul>
+                                </details>
+                                <details style="margin-top:10px;">
+                                    <summary style="cursor:pointer;font-weight:700;color:var(--text);">🔮 VPAN量价注意力（vpan_net）：成交量价格注意力网络</summary>
+                                    <ul style="margin:8px 0 0; padding-left:16px;">
+                                        <li>核心原理：基于注意力机制（Attention）的深度学习模型，专门学习成交量与价格之间的非线性关系，识别资金流入流出的转折点。</li>
+                                        <li>序列长度 vpanSeqLen：15～25，决定模型观察的连续交易日数量。建议20左右。</li>
+                                        <li>重训间隔 vpanRetrainInterval：20～30，控制模型重新训练频率。注意力模型对近期数据更敏感。</li>
+                                        <li>最小概率阈值 vpanMinProb：0.50～0.60，控制信号触发门槛。VPAN对量价配合敏感，阈值不宜过低。</li>
+                                        <li>专注于量价关系，适合成交量活跃的股票。</li>
                                     </ul>
                                 </details>
                             </div>
@@ -3882,10 +4011,40 @@ TUSHARE_TOKEN=你的token
                         <div class="name">🧩 筹码突破</div>
                         <div class="expected">预期40-90%</div>
                     </div>
-                    <div class="strategy-card" data-strategy="random_forest_ml">
+                    <div class="strategy-card" data-strategy="xgboost_ml">
                         <div class="checkbox"></div>
-                        <div class="name">🌲 机器学习</div>
+                        <div class="name">🚀 XGBoost机器学习</div>
                         <div class="expected">预期30-80%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="lstm_ml">
+                        <div class="checkbox"></div>
+                        <div class="name">🧠 LSTM深度学习</div>
+                        <div class="expected">预期35-85%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="ensemble_ml">
+                        <div class="checkbox"></div>
+                        <div class="name">🎭 混合机器学习</div>
+                        <div class="expected">预期40-90%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="stacking_ml">
+                        <div class="checkbox"></div>
+                        <div class="name">🔀 Stacking集成</div>
+                        <div class="expected">预期50-110%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="cnn_lstm_transformer">
+                        <div class="checkbox"></div>
+                        <div class="name">🌌 CNN-LSTM-Transformer</div>
+                        <div class="expected">预期60-130%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="mtsf_net">
+                        <div class="checkbox"></div>
+                        <div class="name">🎯 MTSF-Net多尺度融合</div>
+                        <div class="expected">预期55-120%</div>
+                    </div>
+                    <div class="strategy-card" data-strategy="vpan_net">
+                        <div class="checkbox"></div>
+                        <div class="name">🔮 VPAN量价注意力</div>
+                        <div class="expected">预期50-110%</div>
                     </div>
                 </div>
             </div>
@@ -3905,7 +4064,13 @@ TUSHARE_TOKEN=你的token
                             <option value="momentum_rotation">动量轮动</option>
                             <option value="turtle_enhanced">海龟增强</option>
                             <option value="chip_peak_breakout">筹码突破</option>
-                            <option value="random_forest_ml">机器学习</option>
+                            <option value="xgboost_ml">XGBoost机器学习</option>
+                            <option value="lstm_ml">LSTM深度学习</option>
+                            <option value="ensemble_ml">混合机器学习</option>
+                            <option value="stacking_ml">Stacking集成</option>
+                            <option value="cnn_lstm_transformer">CNN-LSTM-Transformer</option>
+                            <option value="mtsf_net">🎯 MTSF-Net多尺度融合</option>
+                            <option value="vpan_net">🔮 VPAN量价注意力</option>
                         </select>
                     </span>
                 </div>
@@ -3921,7 +4086,7 @@ TUSHARE_TOKEN=你的token
                     ▶️ 运行策略对比
                 </button>
                 <div class="btn-grid" style="margin-top:10px">
-                    <button class="btn btn-info" onclick="fetchStockData()">
+                    <button class="btn btn-info" onclick="refreshStockData()">
                         🔄 刷新数据
                     </button>
                     <button class="btn btn-success" onclick="exportResults()">
@@ -4020,6 +4185,24 @@ TUSHARE_TOKEN=你的token
                     <div class="chart-box full-width">
                         <div class="chart-title">📈 策略收益曲线对比（Tushare真实数据）</div>
                         <div id="equityChart" class="chart chart-large"></div>
+                        <!-- 策略收益图表控制按钮 -->
+                        <div class="equity-controls" style="display: flex; justify-content: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(102, 126, 234, 0.2);">
+                            <button type="button" class="kline-ctrl-btn" onclick="zoomEquityChart('in')" title="放大">
+                                <span>🔍+</span> 放大
+                            </button>
+                            <button type="button" class="kline-ctrl-btn" onclick="zoomEquityChart('out')" title="缩小">
+                                <span>🔍-</span> 缩小
+                            </button>
+                            <button type="button" class="kline-ctrl-btn" onclick="zoomEquityChart('left')" title="左移">
+                                <span>◀</span> 左移
+                            </button>
+                            <button type="button" class="kline-ctrl-btn" onclick="zoomEquityChart('right')" title="右移">
+                                <span>▶</span> 右移
+                            </button>
+                            <button type="button" class="kline-ctrl-btn" onclick="zoomEquityChart('reset')" title="重置">
+                                <span>⟲</span> 重置
+                            </button>
+                        </div>
                     </div>
                     <div class="chart-box">
                         <div class="chart-title">🎯 策略性能雷达图</div>
@@ -4050,7 +4233,9 @@ TUSHARE_TOKEN=你的token
                                 <option value="momentum_rotation">动量轮动</option>
                                 <option value="turtle_enhanced">海龟增强</option>
                                 <option value="chip_peak_breakout">筹码突破</option>
-                                <option value="random_forest_ml">机器学习</option>
+                                <option value="xgboost_ml">XGBoost机器学习</option>
+                                <option value="lstm_ml">LSTM深度学习</option>
+                                <option value="ensemble_ml">混合机器学习</option>
                             </select>
                             <button class="btn btn-success" style="width:auto;padding:4px 10px;font-size:12px;" onclick="addCurrentStockToPool()">⭐ 加入股池</button>
                             <button class="btn btn-info" style="width:auto;padding:4px 10px;font-size:12px;" onclick="openF10ForCurrentStock()">F10资料</button>
@@ -4098,14 +4283,26 @@ TUSHARE_TOKEN=你的token
                         </div>
                     </div>
                     <div class="kline-wrapper" style="display: flex; height: 580px; width: 100%; position: relative;">
-                        <div id="kline-header-info" style="position: absolute; top: 0px; left: 10px; right: 20%; z-index: 100; pointer-events: none; font-size: 14px; line-height: 1.2; color: #ccc;"></div>
+                        <div id="kline-header-info" style="position: absolute; top: 0px; left: 10px; right: 20%; z-index: 100; pointer-events: none; font-size: 16px; line-height: 1.3; color: #ccc;"></div>
                         <div style="flex: 1; display: flex; flex-direction: column; height: 100%;">
                             <div id="klineChart" style="flex: 1; width: 100%;"></div>
-                            <div class="kline-zoom-controls" style="display: flex; justify-content: center; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(102, 126, 234, 0.2);">
-                                <button type="button" class="zoom-btn" onclick="zoomKline('left')" title="左移">◀ 左移</button>
-                                <button type="button" class="zoom-btn" onclick="zoomKline('out')" title="缩小">➖ 缩小</button>
-                                <button type="button" class="zoom-btn" onclick="zoomKline('in')" title="放大">➕ 放大</button>
-                                <button type="button" class="zoom-btn" onclick="zoomKline('right')" title="右移">右移 ▶</button>
+                            <!-- K线控制按钮 -->
+                            <div class="kline-controls" style="display: flex; justify-content: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(102, 126, 234, 0.2);">
+                                <button type="button" class="kline-ctrl-btn" onclick="zoomKline('in')" title="放大">
+                                    <span>🔍+</span> 放大
+                                </button>
+                                <button type="button" class="kline-ctrl-btn" onclick="zoomKline('out')" title="缩小">
+                                    <span>🔍-</span> 缩小
+                                </button>
+                                <button type="button" class="kline-ctrl-btn" onclick="zoomKline('left')" title="左移">
+                                    <span>◀</span> 左移
+                                </button>
+                                <button type="button" class="kline-ctrl-btn" onclick="zoomKline('right')" title="右移">
+                                    <span>▶</span> 右移
+                                </button>
+                                <button type="button" class="kline-ctrl-btn" onclick="zoomKline('reset')" title="重置">
+                                    <span>⟲</span> 重置
+                                </button>
                             </div>
                         </div>
                         <div id="chipChart" style="width: 20%; height: 100%; border-left: 1px solid rgba(102, 126, 234, 0.2); background: rgba(0,0,0,0.1);"></div>
@@ -4114,7 +4311,25 @@ TUSHARE_TOKEN=你的token
 
                 <div class="panel">
                     <div class="panel-title">📊 收益率曲线</div>
-                    <div id="returnCurveChart" style="width:100%;height:300px;"></div>
+                    <div id="returnCurveChart" style="width:100%;height:280px;"></div>
+                    <!-- 收益率曲线控制按钮 -->
+                    <div class="return-curve-controls" style="display: flex; justify-content: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(102, 126, 234, 0.2);">
+                        <button type="button" class="kline-ctrl-btn" onclick="zoomReturnCurve('in')" title="放大">
+                            <span>🔍+</span> 放大
+                        </button>
+                        <button type="button" class="kline-ctrl-btn" onclick="zoomReturnCurve('out')" title="缩小">
+                            <span>🔍-</span> 缩小
+                        </button>
+                        <button type="button" class="kline-ctrl-btn" onclick="zoomReturnCurve('left')" title="左移">
+                            <span>◀</span> 左移
+                        </button>
+                        <button type="button" class="kline-ctrl-btn" onclick="zoomReturnCurve('right')" title="右移">
+                            <span>▶</span> 右移
+                        </button>
+                        <button type="button" class="kline-ctrl-btn" onclick="zoomReturnCurve('reset')" title="重置">
+                            <span>⟲</span> 重置
+                        </button>
+                    </div>
                 </div>
 
                 <div class="panel">
@@ -4886,24 +5101,30 @@ TUSHARE_TOKEN=你的token
                 const debtToAssets = Number(f.debt_to_assets);
                 const nCashflowAct = Number(f.n_cashflow_act);
 
+                // 修改逻辑：无数据的项目默认跳过（放行），有数据的项目必须满足条件
                 if (Number.isFinite(criteria.minRoe) && criteria.minRoe > 0) {
-                    if (!Number.isFinite(roe) || roe < criteria.minRoe) return false;
+                    // ROE有数据时才检查，无数据则跳过
+                    if (Number.isFinite(roe) && roe < criteria.minRoe) return false;
                 }
                 if (Number.isFinite(criteria.minNetprofitYoy) && criteria.minNetprofitYoy > 0) {
-                    if (!Number.isFinite(netprofitYoy) || netprofitYoy < criteria.minNetprofitYoy) return false;
+                    // 净利YoY有数据时才检查，无数据则跳过
+                    if (Number.isFinite(netprofitYoy) && netprofitYoy < criteria.minNetprofitYoy) return false;
                 }
                 if (Number.isFinite(criteria.maxPe) && criteria.maxPe > 0) {
-                    if (!Number.isFinite(pe) || pe <= 0 || pe > criteria.maxPe) return false;
+                    // PE有数据时才检查，无数据则跳过
+                    if (Number.isFinite(pe) && pe > 0 && pe > criteria.maxPe) return false;
                 }
                 if (Number.isFinite(criteria.maxPb) && criteria.maxPb > 0) {
-                    if (!Number.isFinite(pb) || pb <= 0 || pb > criteria.maxPb) return false;
+                    // PB有数据时才检查，无数据则跳过
+                    if (Number.isFinite(pb) && pb > 0 && pb > criteria.maxPb) return false;
                 }
                 if (Number.isFinite(criteria.maxDebtToAssets) && criteria.maxDebtToAssets > 0) {
-                    if (!Number.isFinite(debtToAssets) || debtToAssets < 0 || debtToAssets > criteria.maxDebtToAssets) return false;
+                    // 资产负债率有数据时才检查，无数据则跳过
+                    if (Number.isFinite(debtToAssets) && debtToAssets >= 0 && debtToAssets > criteria.maxDebtToAssets) return false;
                 }
                 if (Number.isFinite(criteria.minOcf)) {
-                    if (!Number.isFinite(nCashflowAct)) return false;
-                    if (nCashflowAct < criteria.minOcf) return false;
+                    // 经营现金流有数据时才检查，无数据则跳过
+                    if (Number.isFinite(nCashflowAct) && nCashflowAct < criteria.minOcf) return false;
                 }
                 return true;
             }
@@ -5236,10 +5457,7 @@ TUSHARE_TOKEN=你的token
                                 let bestCandidate = null;
 
                                 for (const strategy of selectedStrategies) {
-                                    const config = {
-                                        ...currentConfig,
-                                        ...(strategySpecificConfig[strategy] || {})
-                                    };
+                                    const config = getEffectiveStrategyConfig(strategy);
 
                                     const signals = executeStrategy(data, strategy, config);
                                     if (!signals || signals.length === 0) continue;
@@ -5389,10 +5607,7 @@ TUSHARE_TOKEN=你的token
                                 }
                             } else {
                                 for (const strategy of selectedStrategies) {
-                                    const config = {
-                                        ...currentConfig,
-                                        ...(strategySpecificConfig[strategy] || {})
-                                    };
+                                    const config = getEffectiveStrategyConfig(strategy);
 
                                     const signals = executeStrategy(data, strategy, config);
                                     const recentSignals = signals.filter(s => {
@@ -5791,7 +6006,7 @@ TUSHARE_TOKEN=你的token
                             </label>
                             <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#ccc; cursor:pointer;">
                                 <input type="checkbox" id="optEnableMlParams" checked>
-                                机器学习参数
+                                机器学习策略参数
                             </label>
                             <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#ccc; cursor:pointer;">
                                 <input type="checkbox" id="optOnlySpecificParams">
@@ -5934,14 +6149,14 @@ TUSHARE_TOKEN=你的token
                             <label>&nbsp;</label>
                             <div class="btn-group" style="display:flex; gap:8px;">
                                 <button class="btn btn-success" id="btnAddCurrentToPool" onclick="addCurrentStockToPool()">⭐ 自选加入</button>
-                                <button class="btn btn-info" id="btnRefreshPool" onclick="refreshStockPoolNow()">🔄 刷新收益</button>
+                                <button class="btn btn-info" id="btnRefreshPool" onclick="refreshStockPoolWithCheck()">🔄 刷新收益</button>
                                 <button class="btn btn-danger" onclick="deleteSelectedStocks()">🗑️ 删除选中</button>
                                 <button class="btn btn-warning" onclick="clearStockPool()">🧹 清空股池</button>
                             </div>
                         </div>
                     </div>
 
-                    <div style="max-height: 500px; overflow-y: auto;">
+                    <div style="max-height: 675px; overflow-y: auto;">
                         <table class="comparison-table" id="poolTable">
                             <thead>
                                 <tr>
@@ -6022,6 +6237,7 @@ TUSHARE_TOKEN=你的token
 
         let stockPool = new Map();
         let lastRenderedPoolCodes = [];
+        let stockPoolSort = { field: 'strategy', order: 'asc' }; // 排序状态：field可以是 'strategy', 'returnPct'
 
         function getPoolNavEntries() {
             return sortStockPoolEntriesForDisplay(getFilteredStockPoolEntries()).filter(e => e && e.tsCode);
@@ -6585,7 +6801,11 @@ TUSHARE_TOKEN=你的token
             momentum_rotation: {},
             turtle_enhanced: {},
             chip_peak_breakout: {},
-            random_forest_ml: {}
+            xgboost_ml: {},
+            lstm_ml: {},
+            ensemble_ml: {},
+            mtsf_net: {},
+            vpan_net: {}
         };
         const SYSTEM_RECOMMENDED_STRATEGY_SPECIFIC_CONFIG = JSON.parse(JSON.stringify(strategySpecificConfig));
 
@@ -6599,7 +6819,13 @@ TUSHARE_TOKEN=你的token
             momentum_rotation: { name: '⚡ 动量轮动', icon: '⚡', color: '#06b6d4', expectedReturn: '50-100%' },
             turtle_enhanced: { name: '🐢 海龟增强', icon: '🐢', color: '#84cc16', expectedReturn: '40-80%' },
             chip_peak_breakout: { name: '🧩 筹码突破', icon: '🧩', color: '#a78bfa', expectedReturn: '40-90%' },
-            random_forest_ml: { name: '🌲 机器学习', icon: '🌲', color: '#10b981', expectedReturn: '30-80%' }
+            xgboost_ml: { name: '🚀 XGBoost机器学习', icon: '🚀', color: '#10b981', expectedReturn: '30-80%' },
+            lstm_ml: { name: '🧠 LSTM深度学习', icon: '🧠', color: '#8b5cf6', expectedReturn: '35-85%' },
+            ensemble_ml: { name: '🎭 混合机器学习', icon: '🎭', color: '#f43f5e', expectedReturn: '40-90%' },
+            stacking_ml: { name: '🔀 Stacking集成', icon: '🔀', color: '#9c27b0', expectedReturn: '50-110%' },
+            cnn_lstm_transformer: { name: '🌌 CNN-LSTM-Transformer', icon: '🌌', color: '#ff6b6b', expectedReturn: '60-130%' },
+            mtsf_net: { name: '🎯 MTSF-Net多尺度融合', icon: '🎯', color: '#00bcd4', expectedReturn: '55-120%' },
+            vpan_net: { name: '🔮 VPAN量价注意力', icon: '🔮', color: '#ff9800', expectedReturn: '50-110%' }
         };
 
         // ===================== 初始化 =====================
@@ -6613,6 +6839,11 @@ TUSHARE_TOKEN=你的token
             
             // 初始化K线周期选择器
             initKlinePeriodSelector();
+            
+            // 请求桌面通知权限
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
             
             appHydrationPromise = hydrateAndRestoreAll().finally(() => {
                 checkConnection();
@@ -7429,26 +7660,110 @@ TUSHARE_TOKEN=你的token
         }
 
         function scheduleStockPoolAutoRefresh() {
+            // 打开软件时立即刷新一次
             setTimeout(() => {
                 autoRefreshStockPoolIfNeeded();
             }, 2200);
+            
+            // 每天自动刷新一次（检查是否已刷新过）
             setInterval(() => {
                 autoRefreshStockPoolIfNeeded();
-            }, 30 * 60 * 1000);
+            }, 60 * 60 * 1000); // 每小时检查一次是否需要刷新
+        }
+        
+        // 更新股票池收益和卖出信号（仅在需要时调用）
+        function updateStockPoolRealtime() {
+            if (!stockPool || stockPool.size === 0) return;
+            if (!globalStartDate || !globalEndDate) return;
+            
+            let hasSellSignal = false;
+            let sellSignalCount = 0;
+            
+            stockPool.forEach((item, key) => {
+                const cached = loadStockDataFromCache(item.tsCode, globalStartDate, globalEndDate, item.freq || currentKlinePeriod || 'D');
+                if (!cached || cached.length === 0) return;
+                
+                const latest = cached[cached.length - 1];
+                const prev = cached.length > 1 ? cached[cached.length - 2] : null;
+                const latestPrice = Number(latest.close);
+                
+                if (Number.isFinite(latestPrice) && item.currentPrice !== latestPrice) {
+                    item.currentPrice = latestPrice;
+                    if (Number.isFinite(Number(item.entryPrice)) && Number(item.entryPrice) > 0) {
+                        item.returnPct = ((latestPrice - Number(item.entryPrice)) / Number(item.entryPrice)) * 100;
+                    }
+                    item.updatedAt = new Date().toISOString();
+                }
+                
+                // 检测卖出信号
+                const oldSignal = item.sellSignal;
+                item.sellSignal = detectSellSignal(item, latest, prev, cached);
+                
+                if (item.sellSignal && (!oldSignal || oldSignal.type !== item.sellSignal.type)) {
+                    hasSellSignal = true;
+                    sellSignalCount++;
+                    
+                    // 显示桌面通知
+                    if (Notification.permission === 'granted') {
+                        new Notification('卖出信号提醒', {
+                            body: `${item.name} (${item.tsCode}) - ${item.sellSignal.name}: ${item.sellSignal.reason}`,
+                            icon: '⚠️',
+                            tag: `sell-signal-${item.tsCode}`
+                        });
+                    }
+                }
+            });
+            
+            // 更新视图
+            updateStockPoolView();
+            updatePoolStatus();
+            
+            // 如果有新的卖出信号，显示提示
+            if (hasSellSignal && sellSignalCount > 0) {
+                showToast(`检测到 ${sellSignalCount} 只股票出现卖出信号，请查看股票池`, 'warning');
+            }
         }
 
         async function autoRefreshStockPoolIfNeeded() {
             try {
                 if (stockPoolRefreshing) return;
                 if (!stockPool || stockPool.size === 0) return;
-                const today = getLocalDateString();
-                const last = localStorage.getItem(STOCK_POOL_LAST_REFRESH_KEY) || '';
-                if (last === today) return;
+                // 检查今天是否已经刷新过（使用统一的标记）
+                if (isStockPoolUpdatedToday()) return;
                 if (!isConnected) return;
                 const ok = await refreshStockPoolNow({ auto: true });
-                if (ok) localStorage.setItem(STOCK_POOL_LAST_REFRESH_KEY, today);
+                if (ok) {
+                    markStockPoolUpdatedToday();
+                    localStorage.setItem(STOCK_POOL_LAST_REFRESH_KEY, getLocalDateString());
+                }
             } catch (e) {
             }
+        }
+
+        // 刷新股票池（带检查，如果今天已刷新则提示）
+        async function refreshStockPoolWithCheck() {
+            if (isStockPoolUpdatedToday()) {
+                if (confirm('今天已经刷新过股票池了，确定要再次刷新吗？')) {
+                    await forceRefreshStockPoolToday();
+                }
+            } else {
+                await refreshStockPoolNow({ auto: false });
+            }
+        }
+
+        // 强制刷新股票池（清除今日更新标记后刷新）
+        async function forceRefreshStockPoolToday() {
+            // 清除今日更新标记
+            localStorage.removeItem('stock_pool_last_update_date');
+            localStorage.removeItem(STOCK_POOL_LAST_REFRESH_KEY);
+            
+            // 重新加载视图（会触发更新）
+            updateStockPoolView();
+            
+            // 同时刷新后端数据
+            await refreshStockPoolNow({ auto: false });
+            
+            showToast('股票池已强制刷新', 'success');
         }
 
         async function refreshStockPoolNow(options = {}) {
@@ -7553,14 +7868,117 @@ TUSHARE_TOKEN=你的token
         function sortStockPoolEntriesForDisplay(list) {
             const arr = Array.isArray(list) ? list.slice() : [];
             arr.sort((a, b) => {
-                const strategyA = a && a.strategy ? String(a.strategy) : '';
-                const strategyB = b && b.strategy ? String(b.strategy) : '';
-                if (strategyA !== strategyB) return strategyA.localeCompare(strategyB);
-                const ta = a && a.entryTime ? new Date(a.entryTime).getTime() : 0;
-                const tb = b && b.entryTime ? new Date(b.entryTime).getTime() : 0;
-                return tb - ta;
+                // 根据排序字段进行排序
+                if (stockPoolSort.field === 'returnPct') {
+                    const returnA = a && a.returnPct !== undefined ? Number(a.returnPct) : 0;
+                    const returnB = b && b.returnPct !== undefined ? Number(b.returnPct) : 0;
+                    const cmp = returnB - returnA; // 默认降序（高收益在前）
+                    return stockPoolSort.order === 'asc' ? -cmp : cmp;
+                } else {
+                    // 默认按策略名称排序
+                    const strategyA = a && a.strategy ? String(a.strategy) : '';
+                    const strategyB = b && b.strategy ? String(b.strategy) : '';
+                    if (strategyA !== strategyB) return strategyA.localeCompare(strategyB);
+                    const ta = a && a.entryTime ? new Date(a.entryTime).getTime() : 0;
+                    const tb = b && b.entryTime ? new Date(b.entryTime).getTime() : 0;
+                    return tb - ta;
+                }
             });
             return arr;
+        }
+
+        // 切换股票池排序
+        function togglePoolSort(field) {
+            if (stockPoolSort.field === field) {
+                // 切换排序方向
+                stockPoolSort.order = stockPoolSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                // 切换排序字段，默认降序
+                stockPoolSort.field = field;
+                stockPoolSort.order = field === 'returnPct' ? 'desc' : 'asc';
+            }
+            updateStockPoolView();
+        }
+
+        // 获取排序图标
+        function getPoolSortIcon(field) {
+            if (stockPoolSort.field !== field) return '⇅';
+            return stockPoolSort.order === 'asc' ? '↑' : '↓';
+        }
+
+        // 检测卖出信号
+        function detectSellSignal(item, latest, prev, cached) {
+            if (!item || !latest) return null;
+            
+            const currentPrice = Number(latest.close);
+            const entryPrice = Number(item.entryPrice);
+            if (!Number.isFinite(currentPrice) || !Number.isFinite(entryPrice) || entryPrice <= 0) return null;
+            
+            const returnPct = ((currentPrice - entryPrice) / entryPrice) * 100;
+            const signals = [];
+            
+            // 1. 止损信号：亏损超过5%
+            if (returnPct <= -5) {
+                signals.push({ type: 'stop_loss', name: '止损', reason: `亏损${returnPct.toFixed(2)}%`, priority: 1 });
+            }
+            
+            // 2. 止盈信号：盈利超过15%且回撤3%
+            if (returnPct >= 15) {
+                const highPrice = Math.max(...cached.slice(-20).map(d => d.high));
+                const maxReturn = ((highPrice - entryPrice) / entryPrice) * 100;
+                if (maxReturn - returnPct >= 3) {
+                    signals.push({ type: 'take_profit', name: '移动止盈', reason: `盈利${returnPct.toFixed(2)}%，回撤${(maxReturn - returnPct).toFixed(2)}%`, priority: 2 });
+                }
+            }
+            
+            // 3. 技术指标卖出信号
+            if (prev) {
+                // MACD死叉
+                if (latest.macd !== undefined && prev.macd !== undefined) {
+                    if (latest.macd < 0 && prev.macd > 0 && returnPct > 0) {
+                        signals.push({ type: 'macd_death', name: 'MACD死叉', reason: '技术指标转弱', priority: 3 });
+                    }
+                }
+                
+                // 跌破MA5
+                if (latest.ma5 !== undefined && latest.close < latest.ma5 && returnPct > 2) {
+                    signals.push({ type: 'ma5_break', name: '跌破MA5', reason: '短期趋势转弱', priority: 4 });
+                }
+                
+                // RSI超买回落
+                if (latest.rsi !== undefined && latest.rsi > 80 && returnPct > 5) {
+                    signals.push({ type: 'rsi_overbought', name: 'RSI超买', reason: '超买回落', priority: 5 });
+                }
+            }
+            
+            // 4. 最大持仓时间：超过10天
+            if (item.entryTime) {
+                const entryDate = new Date(item.entryTime);
+                const daysHeld = Math.floor((Date.now() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysHeld >= 10) {
+                    signals.push({ type: 'max_hold', name: '持仓时间', reason: `持仓${daysHeld}天`, priority: 6 });
+                }
+            }
+            
+            // 返回最高优先级的信号
+            if (signals.length > 0) {
+                signals.sort((a, b) => a.priority - b.priority);
+                return signals[0];
+            }
+            
+            return null;
+        }
+
+        // 检查今天是否已经更新过
+        function isStockPoolUpdatedToday() {
+            const lastUpdate = localStorage.getItem('stock_pool_last_update_date');
+            const today = getLocalDateString();
+            return lastUpdate === today;
+        }
+        
+        // 标记今天已更新
+        function markStockPoolUpdatedToday() {
+            localStorage.setItem('stock_pool_last_update_date', getLocalDateString());
         }
 
         function updateStockPoolView() {
@@ -7573,11 +7991,14 @@ TUSHARE_TOKEN=你的token
             const globalStartDate = document.getElementById('startDate')?.value;
             const globalEndDate = document.getElementById('endDate')?.value;
             let poolUpdated = false;
-            if (globalStartDate && globalEndDate) {
+            
+            // 自动更新股票池收益 - 仅当今天未更新过时才更新
+            if (globalStartDate && globalEndDate && !isStockPoolUpdatedToday()) {
                 entries.forEach(item => {
                     const cached = loadStockDataFromCache(item.tsCode, globalStartDate, globalEndDate, item.freq || currentKlinePeriod || 'D');
                     if (!cached || cached.length === 0) return;
                     const latest = cached[cached.length - 1] || {};
+                    const prev = cached.length > 1 ? cached[cached.length - 2] : null;
 
                     const latestPrice = Number(latest.close);
                     if (Number.isFinite(latestPrice) && item.currentPrice !== latestPrice) {
@@ -7586,6 +8007,12 @@ TUSHARE_TOKEN=你的token
                             item.returnPct = ((latestPrice - Number(item.entryPrice)) / Number(item.entryPrice)) * 100;
                         }
                         item.updatedAt = new Date().toISOString();
+                        poolUpdated = true;
+                    }
+
+                    // 检测卖出信号
+                    item.sellSignal = detectSellSignal(item, latest, prev, cached);
+                    if (item.sellSignal) {
                         poolUpdated = true;
                     }
 
@@ -7598,6 +8025,11 @@ TUSHARE_TOKEN=你的token
                         poolUpdated = true;
                     }
                 });
+                
+                // 标记今天已更新
+                if (poolUpdated) {
+                    markStockPoolUpdatedToday();
+                }
             }
             if (poolUpdated) {
                 persistStockPool();
@@ -7608,7 +8040,7 @@ TUSHARE_TOKEN=你的token
             if (thead) {
                 thead.innerHTML = `
                     <th style="width: 40px;"><input type="checkbox" id="selectAllPool" onchange="toggleSelectAllPool(this)"></th>
-                    <th>策略名称</th>
+                    <th onclick="togglePoolSort('strategy')" style="cursor:pointer;user-select:none;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">策略名称 ${getPoolSortIcon('strategy')}</th>
                     <th>股票代码</th>
                     <th>股票名称</th>
                     <th>市盈率</th>
@@ -7616,7 +8048,7 @@ TUSHARE_TOKEN=你的token
                     <th>入选时间</th>
                     <th>入选价格</th>
                     <th>最新价格</th>
-                    <th>至今收益</th>
+                    <th onclick="togglePoolSort('returnPct')" style="cursor:pointer;user-select:none;font-weight:bold;">至今收益 ${getPoolSortIcon('returnPct')}</th>
                     <th>操作</th>
                 `;
             }
@@ -7637,10 +8069,27 @@ TUSHARE_TOKEN=你的token
                 const peText = item.pe !== undefined && item.pe !== null && Number.isFinite(Number(item.pe)) ? Number(item.pe).toFixed(2) : '--';
                 const pbText = item.pb !== undefined && item.pb !== null && Number.isFinite(Number(item.pb)) ? Number(item.pb).toFixed(2) : '--';
                 
+                // 卖出信号标识
+                let sellSignalHtml = '';
+                let rowClass = '';
+                if (item.sellSignal) {
+                    const signalColors = {
+                        'stop_loss': '#ff4757',      // 红色 - 止损
+                        'take_profit': '#2ed573',    // 绿色 - 止盈
+                        'macd_death': '#ffa502',     // 橙色 - MACD死叉
+                        'ma5_break': '#ffa502',      // 橙色 - 跌破MA5
+                        'rsi_overbought': '#ffa502', // 橙色 - RSI超买
+                        'max_hold': '#747d8c'        // 灰色 - 持仓时间
+                    };
+                    const color = signalColors[item.sellSignal.type] || '#ff4757';
+                    sellSignalHtml = `<span class="sell-signal-badge" style="background:${color};color:#fff;padding:2px 6px;border-radius:4px;font-size:11px;margin-left:5px;animation:pulse 2s infinite;">${item.sellSignal.name}</span>`;
+                    rowClass = 'sell-signal-row';
+                }
+                
                 return `
-                    <tr>
+                    <tr class="${rowClass}" style="${item.sellSignal ? 'background:rgba(255,71,87,0.1);' : ''}">
                         <td><input type="checkbox" class="pool-item-checkbox" data-key="${itemKey}" value="${item.tsCode}"></td>
-                        <td>${item.strategyName}</td>
+                        <td>${item.strategyName}${sellSignalHtml}</td>
                         <td><span style="color:#667eea;font-weight:bold">${item.tsCode}</span></td>
                         <td>${item.name}</td>
                         <td>${peText}</td>
@@ -7651,6 +8100,7 @@ TUSHARE_TOKEN=你的token
                         <td class="${returnClass}">${returnText}</td>
                         <td>
                             <button class="btn btn-sm btn-primary" style="padding:4px 8px;font-size:12px;" onclick="viewStock('${item.tsCode}', '${item.name}', '${item.strategy}')">查看</button>
+                            ${item.sellSignal ? `<button class="btn btn-sm btn-danger" style="padding:4px 8px;font-size:12px;margin-left:5px;" onclick="showSellSignalDetail('${item.tsCode}', '${item.name}')">卖出提示</button>` : ''}
                         </td>
                     </tr>
                 `;
@@ -7712,6 +8162,135 @@ TUSHARE_TOKEN=你的token
             
             updateStockPoolView();
             alert(`已删除 ${deletedCount} 只股票`);
+        }
+
+        // 显示卖出信号详情
+        function showSellSignalDetail(tsCode, name) {
+            const key = Array.from(stockPool.keys()).find(k => k.startsWith(tsCode + '_'));
+            if (!key) return;
+            
+            const item = stockPool.get(key);
+            if (!item || !item.sellSignal) return;
+            
+            const signal = item.sellSignal;
+            const returnPct = item.returnPct !== undefined ? item.returnPct : 0;
+            const profit = returnPct >= 0 ? '盈利' : '亏损';
+            const profitClass = returnPct >= 0 ? 'positive' : 'negative';
+            
+            const modalHtml = `
+                <div id="sellSignalModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;display:flex;justify-content:center;align-items:center;">
+                    <div style="background:#fff;border-radius:12px;padding:30px;max-width:500px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+                        <div style="text-align:center;margin-bottom:20px;">
+                            <div style="font-size:48px;margin-bottom:10px;">⚠️</div>
+                            <h3 style="color:#ff4757;margin:0;">卖出信号提醒</h3>
+                        </div>
+                        
+                        <div style="background:#f8f9fa;border-radius:8px;padding:20px;margin-bottom:20px;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
+                                <span style="color:#666;">股票代码:</span>
+                                <span style="font-weight:bold;color:#667eea;">${tsCode}</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
+                                <span style="color:#666;">股票名称:</span>
+                                <span style="font-weight:bold;">${name}</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
+                                <span style="color:#666;">当前收益:</span>
+                                <span class="${profitClass}" style="font-weight:bold;font-size:18px;">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
+                                <span style="color:#666;">入场价格:</span>
+                                <span>¥${(item.entryPrice || 0).toFixed(2)}</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;">
+                                <span style="color:#666;">当前价格:</span>
+                                <span>¥${(item.currentPrice || 0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:15px;margin-bottom:20px;">
+                            <div style="font-weight:bold;color:#856404;margin-bottom:10px;">
+                                📊 卖出信号: ${signal.name}
+                            </div>
+                            <div style="color:#856404;">
+                                ${signal.reason}
+                            </div>
+                        </div>
+                        
+                        <div style="display:flex;gap:10px;">
+                            <button onclick="closeSellSignalModal()" style="flex:1;padding:12px;background:#f1f2f6;border:none;border-radius:8px;cursor:pointer;font-size:14px;">
+                                暂不卖出
+                            </button>
+                            <button onclick="sellStockFromPool('${tsCode}', '${name}')" style="flex:1;padding:12px;background:#ff4757;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold;">
+                                立即卖出
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+        
+        // 关闭卖出信号弹窗
+        function closeSellSignalModal() {
+            const modal = document.getElementById('sellSignalModal');
+            if (modal) modal.remove();
+        }
+        
+        // 从股票池卖出股票
+        function sellStockFromPool(tsCode, name) {
+            const key = Array.from(stockPool.keys()).find(k => k.startsWith(tsCode + '_'));
+            if (key) {
+                const item = stockPool.get(key);
+                const returnPct = item.returnPct || 0;
+                
+                // 记录卖出操作
+                console.log(`[卖出] ${tsCode} ${name} - 收益: ${returnPct.toFixed(2)}%`);
+                
+                // 从股票池删除
+                stockPool.delete(key);
+                persistStockPool();
+                updateStockPoolView();
+                
+                // 关闭弹窗
+                closeSellSignalModal();
+                
+                // 显示成功提示
+                showToast(`已成功卖出 ${name} (${tsCode})，收益 ${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`, returnPct >= 0 ? 'success' : 'warning');
+            }
+        }
+        
+        // Toast提示函数
+        function showToast(message, type = 'info') {
+            const colors = {
+                'success': '#2ed573',
+                'warning': '#ffa502',
+                'error': '#ff4757',
+                'info': '#667eea'
+            };
+            
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position:fixed;
+                top:20px;
+                right:20px;
+                background:${colors[type] || colors.info};
+                color:#fff;
+                padding:15px 25px;
+                border-radius:8px;
+                box-shadow:0 4px 12px rgba(0,0,0,0.2);
+                z-index:10001;
+                font-weight:bold;
+                animation:slideIn 0.3s ease;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
         }
 
         function clearStockPool() {
@@ -7838,6 +8417,54 @@ TUSHARE_TOKEN=你的token
             document.getElementById('stockName').textContent = name;
             document.getElementById('searchResults').classList.remove('active');
             if (typeof scheduleSaveUiState === 'function') scheduleSaveUiState();
+        }
+
+        // ===================== 刷新数据（强制更新） =====================
+        async function refreshStockData() {
+            const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+            
+            loading.classList.add('active');
+            loadingText.textContent = '正在清除缓存并获取最新数据...';
+            document.getElementById('loadingProgress').style.width = '10%';
+            
+            const tsCodeInput = document.getElementById('stockCode');
+            const tsCodeRaw = tsCodeInput.value;
+            const tsCode = normalizeTsCode(tsCodeRaw) || tsCodeRaw;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            // 清除该股票的缓存数据
+            const cacheKey = `stock_${tsCode}_${startDate}_${endDate}_${currentKlinePeriod}`;
+            const coveringKey = `covering_${tsCode}_${startDate}_${endDate}_${currentKlinePeriod}`;
+            localStorage.removeItem(cacheKey);
+            localStorage.removeItem(coveringKey);
+            
+            // 清除所有相关的缓存条目
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(`stock_${tsCode}_`) || key && key.startsWith(`covering_${tsCode}_`)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            console.log(`🗑️ 已清除 ${tsCode} 的缓存数据，准备重新获取...`);
+            
+            loadingText.textContent = '正在获取最新数据...';
+            document.getElementById('loadingProgress').style.width = '30%';
+            
+            // 调用正常的获取数据流程（此时缓存已清除，会强制从API获取）
+            const result = await fetchStockData();
+            
+            if (result) {
+                console.log('✅ 数据刷新成功');
+            } else {
+                console.error('❌ 数据刷新失败');
+            }
+            
+            return result;
         }
 
         // ===================== 获取数据 =====================
@@ -9011,25 +9638,72 @@ TUSHARE_TOKEN=你的token
                     
                     try {
                         // 为每个策略构建独立的配置（与 runOptimization 保持一致）
-                        // 强制重新从全局对象获取最新配置，防止闭包缓存旧值
-                        const currentSpecificConfig = strategySpecificConfig[strategy] || {};
-                        console.log(`🔍 [${strategy}] 实时获取的特定配置:`, JSON.stringify(currentSpecificConfig));
-
-                        const strategyConfig = {
-                            ...currentConfig,
-                            ...currentSpecificConfig
-                        };
+                        // 使用 getEffectiveStrategyConfig 确保包含默认值
+                        const strategyConfig = getEffectiveStrategyConfig(strategy);
+                        console.log(`🔍 [${strategy}] 实时获取的特定配置:`, JSON.stringify(strategySpecificConfig[strategy] || {}));
                         
                         console.log(`🔄 开始执行策略: ${strategy}`);
                         console.log(`📊 股票数据量: ${stockData.length}`);
                         console.log(`⚙️ 传入配置参数:`, strategyConfig);
                         console.log(`🎯 策略 ${strategy} 的参数:`, strategySpecificConfig[strategy]);
                         
-                        const signals = executeStrategy(stockData, strategy, strategyConfig);
-                        console.log(`📈 生成信号数量: ${signals.length}`);
+                        let signals = [];
+                        let result = null;
                         
-                        const result = calculateBacktest(stockData, signals, initCapital);
-                        console.log(`💰 回测结果:`, result);
+                        // CNN-LSTM-Transformer和Stacking策略使用前端模拟（更灵活）
+                        if (strategy === 'cnn_lstm_transformer') {
+                            signals = executeStrategy(stockData, strategy, strategyConfig);
+                            result = calculateBacktest(stockData, signals, initCapital);
+                            console.log(`📈 生成信号数量: ${signals.length}`);
+                            console.log(`💰 回测结果:`, result);
+                        } else if (strategy === 'lstm_ml' || strategy === 'ensemble_ml' || strategy === 'mtsf_net' || strategy === 'vpan_net') {
+                            try {
+                                const apiUrl = `${API_BASE}/strategy_backtest`;
+                                console.log(`🌐 调用后端API: ${apiUrl}`);
+                                console.log(`📤 请求参数:`, { ts_code: tsCode, strategy, config: strategyConfig });
+                                
+                                const response = await fetch(apiUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        ts_code: tsCode,
+                                        start_date: startDate,
+                                        end_date: endDate,
+                                        strategy: strategy,
+                                        config: strategyConfig,
+                                        init_capital: initCapital
+                                    })
+                                });
+                                
+                                console.log(`📥 响应状态: ${response.status}`);
+                                
+                                const data = await response.json();
+                                console.log(`📥 响应数据:`, data);
+                                
+                                if (data.success) {
+                                    signals = data.signals || [];
+                                    result = data.result || {};
+                                    console.log(`📈 后端生成信号数量: ${signals.length}`);
+                                    console.log(`💰 后端回测结果:`, result);
+                                } else {
+                                    throw new Error(data.message || '后端策略执行失败');
+                                }
+                            } catch (apiError) {
+                                console.error(`❌ 调用后端API失败:`, apiError);
+                                // 如果API调用失败，回退到前端模拟
+                                console.log('⚠️ 回退到前端模拟策略');
+                                signals = executeStrategy(stockData, strategy, strategyConfig);
+                                result = calculateBacktest(stockData, signals, initCapital);
+                            }
+                        } else {
+                            // 其他策略使用前端模拟
+                            signals = executeStrategy(stockData, strategy, strategyConfig);
+                            result = calculateBacktest(stockData, signals, initCapital);
+                            console.log(`📈 生成信号数量: ${signals.length}`);
+                            console.log(`💰 回测结果:`, result);
+                        }
                         
                         strategyResults[strategy] = {
                             ...result,
@@ -9270,6 +9944,168 @@ TUSHARE_TOKEN=你的token
             return f;
         }
 
+        function xgboostExtractFeatures(data, i) {
+            const d = data && data[i] ? data[i] : null;
+            const prev = data && i > 0 ? data[i - 1] : null;
+            if (!d || !prev) return null;
+
+            const close = Number(d.close);
+            if (!Number.isFinite(close) || close <= 0) return null;
+            const open = Number.isFinite(Number(d.open)) ? Number(d.open) : close;
+            const prevClose = Number(prev.close);
+            const gap = (Number.isFinite(prevClose) && prevClose > 0) ? ((open - prevClose) / prevClose) : 0;
+            const atrRaw = d.atr !== undefined ? Number(d.atr) : NaN;
+            const atr = (Number.isFinite(atrRaw) && atrRaw > 0) ? atrRaw : (Math.abs(Number(d.high) - Number(d.low)) * 0.5);
+            const atrPct = (Number.isFinite(atr) && atr > 0) ? (atr / close) : 0;
+            const bodyPct = (open > 0) ? (Math.abs(close - open) / open) : 0;
+
+            const rsi = Number(d.rsi);
+            const macd = Number(d.macd);
+            const macdHist = Number(d.macdHist);
+            const ma5 = Number(d.ma5);
+            const ma10 = Number(d.ma10);
+            const ma20 = Number(d.ma20);
+            const ma60 = Number(d.ma60);
+            const vol = Number(d.volume);
+            const volMa5 = Number(d.volMa5);
+
+            // 动量特征 - 多周期
+            const mom3 = i >= 3 ? (close - Number(data[i - 3].close)) / Number(data[i - 3].close) : 0;
+            const mom5 = i >= 5 ? (close - Number(data[i - 5].close)) / Number(data[i - 5].close) : 0;
+            const mom10 = i >= 10 ? (close - Number(data[i - 10].close)) / Number(data[i - 10].close) : 0;
+            const mom20 = i >= 20 ? (close - Number(data[i - 20].close)) / Number(data[i - 20].close) : 0;
+
+            // 价格位置 - 扩展到60日
+            const high20 = Number(d.high20) || rollingMaxField(data, i + 1, 20, 'high');
+            const low20 = Number(d.low20) || rollingMinField(data, i + 1, 20, 'low');
+            const pos20 = (Number.isFinite(high20) && Number.isFinite(low20) && high20 > low20) ? ((close - low20) / (high20 - low20)) : 0.5;
+
+            const high60 = rollingMaxField(data, i + 1, 60, 'high');
+            const low60 = rollingMinField(data, i + 1, 60, 'low');
+            const pos60 = (Number.isFinite(high60) && Number.isFinite(low60) && high60 > low60) ? ((close - low60) / (high60 - low60)) : 0.5;
+
+            // 成交量比率
+            const volRatio = (Number.isFinite(vol) && Number.isFinite(volMa5) && volMa5 > 0) ? (vol / volMa5) : 1;
+
+            // 均线斜率 - 多周期
+            const ma5Prev = i >= 3 ? Number(data[i - 3].ma5 || ma5) : ma5;
+            const ma10Prev = i >= 5 ? Number(data[i - 5].ma10 || ma10) : ma10;
+            const ma20Prev = i >= 5 ? Number(data[i - 5].ma20 || ma20) : ma20;
+            const ma60Prev = i >= 10 ? Number(data[i - 10].ma60 || ma60) : ma60;
+
+            const slope5 = (Number.isFinite(ma5) && ma5 > 0) ? ((ma5 - ma5Prev) / ma5) : 0;
+            const slope10 = (Number.isFinite(ma10) && ma10 > 0) ? ((ma10 - ma10Prev) / ma10) : 0;
+            const slope20 = (Number.isFinite(ma20) && ma20 > 0) ? ((ma20 - ma20Prev) / ma20) : 0;
+            const slope60 = (Number.isFinite(ma60) && ma60 > 0) ? ((ma60 - ma60Prev) / ma60) : 0;
+
+            // 均线多头排列强度
+            let maAlignment = 0;
+            if (ma5 > ma10 && ma10 > ma20 && ma20 > ma60) {
+                maAlignment = 1;
+            } else if (ma5 > ma20 && ma20 > ma60) {
+                maAlignment = 0.5;
+            } else if (ma20 > ma60) {
+                maAlignment = 0.25;
+            }
+
+            // 价格突破特征
+            let breakoutStrength = 0;
+            if (close > ma20 && prevClose <= ma20) {
+                breakoutStrength = 1;
+            }
+            if (close > ma60 && prevClose <= ma60) {
+                breakoutStrength = Math.max(breakoutStrength, 1);
+            }
+
+            // 连续上涨天数
+            let upDays = 0;
+            for (let j = i; j >= Math.max(0, i - 10); j--) {
+                if (j > 0 && data[j].close > data[j - 1].close) {
+                    upDays++;
+                } else {
+                    break;
+                }
+            }
+            const upDaysRatio = upDays / 10;
+
+            // 动量加速特征
+            const momAccel = mom10 !== 0 ? (mom5 - mom10) : 0;
+
+            // 成交量放大趋势
+            let volTrend = 0;
+            if (i >= 5) {
+                let volPrev5 = 0;
+                for (let j = i - 5; j < i; j++) {
+                    volPrev5 += Number(data[j].volume);
+                }
+                volPrev5 = volPrev5 / 5;
+                if (volPrev5 > 0) {
+                    volTrend = vol / volPrev5;
+                }
+            }
+
+            // 布林带位置
+            const bollUpper = Number(d.bollUpper);
+            const bollLower = Number(d.bollLower);
+            const bollPos = (Number.isFinite(bollUpper) && Number.isFinite(bollLower) && bollUpper > bollLower) ? ((close - bollLower) / (bollUpper - bollLower)) : 0.5;
+
+            // KDJ指标
+            const k = Number(d.kdjK);
+            const dKdj = Number(d.kdjD);
+            const jKdj = Number(d.kdjJ);
+
+            // MACD金叉信号
+            const macdPrev = i >= 1 ? Number(data[i - 1].macd || 0) : 0;
+            const macdHistPrev = i >= 1 ? Number(data[i - 1].macdHist || 0) : 0;
+            let macdGoldenCross = 0;
+            if (macd > 0 && macdPrev <= 0) {
+                macdGoldenCross = 1;
+            }
+            if (macdHist > 0 && macdHistPrev <= 0) {
+                macdGoldenCross = Math.max(macdGoldenCross, 1);
+            }
+
+            // 特征向量 (28个特征)
+            const f = [
+                Number.isFinite(rsi) ? (rsi / 100.0) : 0.5,
+                Number.isFinite(macd) ? (macd / close) : 0,
+                (Number.isFinite(ma5) && ma5 > 0) ? (close / ma5 - 1) : 0,
+                (Number.isFinite(ma10) && ma10 > 0) ? (close / ma10 - 1) : 0,
+                (Number.isFinite(ma20) && ma20 > 0) ? (close / ma20 - 1) : 0,
+                (Number.isFinite(ma60) && ma60 > 0) ? (close / ma60 - 1) : 0,
+                Number.isFinite(volRatio) ? volRatio : 1,
+                Number.isFinite(pos20) ? pos20 : 0.5,
+                Number.isFinite(pos60) ? pos60 : 0.5,
+                Number.isFinite(mom3) ? mom3 : 0,
+                Number.isFinite(mom5) ? mom5 : 0,
+                Number.isFinite(mom10) ? mom10 : 0,
+                Number.isFinite(mom20) ? mom20 : 0,
+                Number.isFinite(gap) ? gap : 0,
+                Number.isFinite(atrPct) ? atrPct : 0,
+                Number.isFinite(bodyPct) ? bodyPct : 0,
+                Number.isFinite(slope5) ? slope5 : 0,
+                Number.isFinite(slope10) ? slope10 : 0,
+                Number.isFinite(slope20) ? slope20 : 0,
+                Number.isFinite(slope60) ? slope60 : 0,
+                Number.isFinite(maAlignment) ? maAlignment : 0,
+                Number.isFinite(breakoutStrength) ? breakoutStrength : 0,
+                Number.isFinite(upDaysRatio) ? upDaysRatio : 0,
+                Number.isFinite(momAccel) ? momAccel : 0,
+                Number.isFinite(volTrend) ? volTrend : 0,
+                Number.isFinite(bollPos) ? bollPos : 0.5,
+                Number.isFinite(k) ? (k / 100.0) : 0.5,
+                Number.isFinite(dKdj) ? (dKdj / 100.0) : 0.5,
+                Number.isFinite(jKdj) ? (jKdj / 100.0) : 0.5,
+                Number.isFinite(macdHist) ? (macdHist / close) : 0,
+                Number.isFinite(macdGoldenCross) ? macdGoldenCross : 0,
+            ];
+
+            for (const v of f) {
+                if (!Number.isFinite(v)) return null;
+            }
+            return f;
+        }
+
         function rfGini(pos, total) {
             if (!(total > 0)) return 0;
             const p = pos / total;
@@ -9477,7 +10313,7 @@ TUSHARE_TOKEN=你的token
             let rfModel = null;
             let rfLastTrainIndex = -999;
             let rfSeed = 1337;
-            const debugInfo = (strategyName === 'chip_peak_breakout' || strategyName === 'random_forest_ml') ? {
+            const debugInfo = (strategyName === 'chip_peak_breakout' || strategyName === 'xgboost_ml') ? {
                 strategy: strategyName,
                 totalDays: 0,
                 buySignals: 0,
@@ -9574,6 +10410,128 @@ TUSHARE_TOKEN=你的token
                             if (conditionCount > 0 && satisfiedCount >= conditionCount - (bonusPoints > 0 ? 1 : 0)) {
                                 buySignal = true;
                                 signalStrength = 70 + bonusPoints;
+                            }
+                        }
+                        break;
+                    case 'cnn_lstm_transformer':
+                        if (position === 0) {
+                            const minProb = Math.max(0.30, Math.min(0.9, Number(fullConfig.cnnLstmTransformerMinProb ?? 0.40)));
+                            const useStrictFilter = fullConfig.cnnLstmTransformerUseStrictFilter === true;
+                            const cnnWeight = fullConfig.cnnWeight !== undefined ? Number(fullConfig.cnnWeight) : 0.30;
+                            const lstmWeight = fullConfig.lstmWeight !== undefined ? Number(fullConfig.lstmWeight) : 0.35;
+                            const transformerWeight = fullConfig.transformerWeight !== undefined ? Number(fullConfig.transformerWeight) : 0.25;
+                            const trendWeight = fullConfig.cnnLstmTransformerTrendWeight !== undefined ? Number(fullConfig.cnnLstmTransformerTrendWeight) : 0.1;
+                            
+                            const ma20Raw = d.ma20 !== undefined ? Number(d.ma20) : NaN;
+                            const ma60Raw = d.ma60 !== undefined ? Number(d.ma60) : NaN;
+                            // 放宽趋势条件
+                            const trendOk = Number.isFinite(ma20Raw) && d.close >= ma20Raw * 0.97;
+                            
+                            const volOk = d.volMa5 ? (d.volume / d.volMa5) >= 0.7 : true;
+                            
+                            const rsi = d.rsi !== undefined ? Number(d.rsi) : 50;
+                            const macd = d.macd !== undefined ? Number(d.macd) : 0;
+                            const ma5 = d.ma5 !== undefined ? Number(d.ma5) : d.close;
+                            const ma10 = d.ma10 !== undefined ? Number(d.ma10) : d.close;
+                            
+                            const pos20 = d.pos20 !== undefined ? Number(d.pos20) : 0.5;
+                            const priceChangeHighFilter = prev.close ? (d.close - prev.close) / prev.close : 0;
+                            // 放宽高位过滤条件
+                            const highPosition = rsi > 80 || pos20 > 0.85 || priceChangeHighFilter > 0.05 || (d.bollUpper && d.close > d.bollUpper * 0.99);
+                            
+                            if (highPosition) {
+                                buySignal = false;
+                                break;
+                            }
+                            
+                            let cnnScore = 0;
+                            let lstmScore = 0;
+                            let transformerScore = 0;
+                            let trendScore = 0;
+                            
+                            // 趋势评分 - 放宽条件
+                            if (ma5 > ma10 && ma10 > ma20Raw) trendScore += 30;
+                            else if (ma10 > ma20Raw) trendScore += 22;
+                            else if (ma5 > ma20Raw) trendScore += 15;
+                            else if (d.close >= ma20Raw * 0.97) trendScore += 8;
+                            
+                            if (rsi < 50) trendScore += 15;
+                            else if (rsi < 60) trendScore += 10;
+                            else if (rsi < 70) trendScore += 5;
+                            
+                            if (macd > 0) trendScore += 12;
+                            else if (macd > -0.15) trendScore += 6;
+                            
+                            // CNN评分 - 成交量
+                            const volRatio = d.volMa5 ? (d.volume / d.volMa5) : 1.0;
+                            if (volRatio > 1.5) cnnScore += 30;
+                            else if (volRatio > 1.1) cnnScore += 22;
+                            else if (volRatio > 0.8) cnnScore += 12;
+                            else if (volRatio > 0.5) cnnScore += 5;
+                            
+                            const kdjK = d.kdjK !== undefined ? Number(d.kdjK) : 50;
+                            const kdjD = d.kdjD !== undefined ? Number(d.kdjD) : 50;
+                            if (kdjK > kdjD && kdjD < 50) cnnScore += 20;
+                            else if (kdjK > kdjD && kdjD < 65) cnnScore += 12;
+                            else if (kdjK > kdjD && kdjD < 80) cnnScore += 6;
+                            
+                            if (pos20 < 0.45) cnnScore += 20;
+                            else if (pos20 < 0.6) cnnScore += 14;
+                            else if (pos20 < 0.75) cnnScore += 7;
+                            
+                            // LSTM评分 - RSI和MACD
+                            if (rsi < 45) lstmScore += 25;
+                            else if (rsi < 55) lstmScore += 20;
+                            else if (rsi < 65) lstmScore += 12;
+                            else if (rsi < 75) lstmScore += 5;
+                            
+                            if (macd > 0.03) lstmScore += 20;
+                            else if (macd > -0.05) lstmScore += 16;
+                            else if (macd > -0.2) lstmScore += 8;
+                            else if (macd > -0.4) lstmScore += 3;
+                            
+                            // Transformer评分 - 价格变化
+                            const priceChange = prev.close ? (d.close - prev.close) / prev.close : 0;
+                            if (priceChange > 0.003 && priceChange <= 0.02) transformerScore += 25;
+                            else if (priceChange > 0 && priceChange <= 0.03) transformerScore += 18;
+                            else if (priceChange > -0.01 && priceChange <= 0) transformerScore += 10;
+                            else if (priceChange > 0.02 && priceChange <= 0.04) transformerScore += 8;
+                            else if (priceChange > 0.04) transformerScore -= 5;
+                            
+                            // 布林带评分
+                            const bollWidth = d.bollUpper && d.bollLower ? (d.bollUpper - d.bollLower) / d.close : 0;
+                            if (bollWidth > 0.04 && bollWidth <= 0.12) transformerScore += 20;
+                            else if (bollWidth > 0.12 && bollWidth <= 0.18) transformerScore += 14;
+                            else if (bollWidth > 0.02 && bollWidth <= 0.04) transformerScore += 8;
+                            
+                            // 计算总分
+                            const totalScore = (cnnScore * cnnWeight + lstmScore * lstmWeight + transformerScore * transformerWeight + trendScore * trendWeight);
+                            const maxScore = 100 * cnnWeight + 100 * lstmWeight + 100 * transformerWeight + 30 * trendWeight;
+                            const prob = Math.max(0, Math.min(1, totalScore / maxScore));
+                            
+                            let conditionsMet = 0;
+                            if (prob >= minProb) conditionsMet++;
+                            if (prob >= 0.40) conditionsMet++;
+                            if (trendOk || d.close > ma60Raw) conditionsMet++;
+                            if (volOk || volRatio > 0.5) conditionsMet++;
+                            
+                            signalStrength = Math.max(45, Math.min(100, prob * 100));
+                            
+                            // 只需要满足2个条件
+                            if (conditionsMet >= 2) {
+                                if (useStrictFilter) {
+                                    const gap = d.open && prev.close ? (d.open - prev.close) / prev.close : 0;
+                                    const atr = d.atr !== undefined ? Number(d.atr) : (d.high - d.low) * 0.5;
+                                    const atrPct = d.close > 0 ? atr / d.close : 0;
+                                    const gapOk = Math.abs(gap) < 0.15;
+                                    const atrOk = atrPct < 0.35;
+                                    
+                                    if (gapOk && atrOk) {
+                                        buySignal = true;
+                                    }
+                                } else {
+                                    buySignal = true;
+                                }
                             }
                         }
                         break;
@@ -9789,135 +10747,313 @@ TUSHARE_TOKEN=你的token
                         }
                         break;
 
-                    case 'random_forest_ml':
+                    case 'xgboost_ml':
                         if (position === 0) {
-                            const lookback = Math.max(80, Math.min(400, Math.floor(Number(fullConfig.rfLookback ?? 240))));
-                            const horizon = Math.max(3, Math.min(60, Math.floor(Number(fullConfig.rfHorizon ?? 10))));
-                            const retrainInterval = Math.max(5, Math.min(60, Math.floor(Number(fullConfig.rfRetrainInterval ?? 20))));
-                            const minProb = Math.max(0.5, Math.min(0.95, Number(fullConfig.rfMinProb ?? 0.65)));
-                            const trees = Math.max(5, Math.min(80, Math.floor(Number(fullConfig.rfTrees ?? 25))));
-                            const maxDepth = Math.max(1, Math.min(6, Math.floor(Number(fullConfig.rfMaxDepth ?? 3))));
-                            const featureRate = Math.max(0.3, Math.min(1.0, Number(fullConfig.rfFeatureRate ?? 0.7)));
-                            const minLeaf = Math.max(6, Math.min(60, Math.floor(Number(fullConfig.rfMinLeaf ?? 10))));
-                            const minOobAcc = Math.max(0.0, Math.min(1.0, Number(fullConfig.rfMinOobAcc ?? 0.52)));
-                            const minEdge = Math.max(0.0, Math.min(0.3, Number(fullConfig.rfMinEdge ?? 0.03)));
-                            const trendMode = Math.max(0, Math.min(2, Math.floor(Number(fullConfig.rfTrendMode ?? 1))));
-                            let retThr = Number(fullConfig.rfReturnThreshold ?? 5);
-                            if (Number.isFinite(retThr) && retThr > 1) retThr = retThr / 100;
-                            if (!Number.isFinite(retThr)) retThr = 0.05;
-                            const volumeMulti = fullConfig.volumeMulti !== undefined ? Number(fullConfig.volumeMulti) : 1.2;
-                            let maxGapPct = Number(fullConfig.rfMaxGapPct ?? 7);
-                            if (Number.isFinite(maxGapPct) && maxGapPct > 1) maxGapPct = maxGapPct / 100;
-                            if (!Number.isFinite(maxGapPct)) maxGapPct = 0.07;
-                            maxGapPct = Math.max(0.0, Math.min(0.3, maxGapPct));
-                            let maxAtrPct = Number(fullConfig.rfMaxAtrPct ?? 12);
-                            if (Number.isFinite(maxAtrPct) && maxAtrPct > 1) maxAtrPct = maxAtrPct / 100;
-                            if (!Number.isFinite(maxAtrPct)) maxAtrPct = 0.12;
-                            maxAtrPct = Math.max(0.02, Math.min(0.5, maxAtrPct));
-
-                            if ((i - rfLastTrainIndex) >= retrainInterval) {
-                                const end = i;
-                                const start = Math.max(warmup, end - lookback);
-                                const lastTrain = end - horizon - 1;
-                                const minTrain = Math.max(40, Math.min(80, Math.floor(lookback * 0.25)));
-                                if (debugInfo) debugInfo.rf.trainAttempts++;
-                                if (lastTrain - start >= minTrain) {
-                                    const feats = [];
-                                    const returns = [];
-                                    for (let j = start; j <= lastTrain; j++) {
-                                        const f = rfExtractFeatures(data, j);
-                                        if (!f) continue;
-                                        const c0 = Number(data[j] && data[j].close);
-                                        const c1 = Number(data[j + horizon] && data[j + horizon].close);
-                                        if (!(Number.isFinite(c0) && Number.isFinite(c1) && c0 > 0)) continue;
-                                        const r = (c1 - c0) / c0;
-                                        if (!Number.isFinite(r)) continue;
-                                        feats.push(f);
-                                        returns.push(r);
-                                    }
-                                    const nTrain = feats.length;
-                                    const minPos = Math.max(3, Math.floor(nTrain * 0.08));
-                                    const maxPos = Math.max(0, nTrain - minPos);
-                                    let thrUse = retThr;
-                                    let labels = returns.map(r => r >= thrUse);
-                                    let pos = 0;
-                                    for (const y of labels) pos += y ? 1 : 0;
-                                    if (nTrain >= minTrain && (pos < minPos || pos > maxPos)) {
-                                        const q = pos < minPos ? 0.8 : 0.2;
-                                        const thrQ = quantile(returns, q);
-                                        if (thrQ !== null) {
-                                            thrUse = thrQ;
-                                            labels = returns.map(r => r >= thrUse);
-                                            pos = 0;
-                                            for (const y of labels) pos += y ? 1 : 0;
-                                        }
-                                    }
-
-                                    if (nTrain >= minTrain && pos >= minPos && pos <= maxPos) {
-                                        const model = rfTrainModel(feats, labels, { trees, maxDepth, featureRate, minLeaf }, rfSeed + i);
-                                        if (model && model.oobCoverage >= 0.25 && model.oobAcc >= minOobAcc) {
-                                            rfModel = model;
-                                            if (debugInfo) debugInfo.rf.trained++;
-                                        } else {
-                                            rfModel = null;
-                                            if (debugInfo) debugInfo.rf.trainImbalance++;
-                                        }
-                                        rfLastTrainIndex = i;
+                            const lookback = Math.max(100, Math.min(500, Math.floor(Number(fullConfig.xgbLookback ?? 200))));
+                            const horizon = Math.max(5, Math.min(30, Math.floor(Number(fullConfig.xgbHorizon ?? 15))));
+                            const minProb = Math.max(0.5, Math.min(0.9, Number(fullConfig.xgbMinProb ?? 0.55)));
+                            const volumeMulti = fullConfig.volumeMulti !== undefined ? Number(fullConfig.volumeMulti) : 1.0;
+                            const useStrictFilter = fullConfig.xgbUseStrictFilter === true;
+                            
+                            // 前端使用改进的加权评分系统模拟XGBoost
+                            const features = xgboostExtractFeatures(data, i);
+                            if (features) {
+                                const [rsi, macd, priceMa5, priceMa10, priceMa20, priceMa60, volRatio, pos20, pos60, mom3, mom5, mom10, mom20, gap, atrPct, bodyPct, slope5, slope10, slope20, slope60, maAlignment, breakoutStrength, upDaysRatio, momAccel, volTrend, bollPos, kdjK, kdjD, kdjJ, macdHist] = features;
+                                
+                                // 计算综合评分（模拟XGBoost输出）- 多维度评分系统
+                                let score = 0;
+                                
+                                // 绝对收益评分 (0-40分) - 重点关注大涨幅
+                                const absReturn = Math.abs((d.close - data[Math.min(i + 15, data.length - 1)].close) / d.close);
+                                if (absReturn > 0.15) score += 40;  // 涨幅>15%
+                                else if (absReturn > 0.10) score += 30;  // 涨幅>10%
+                                else if (absReturn > 0.05) score += 20;  // 涨幅>5%
+                                else if (absReturn > 0.02) score += 10;  // 涨幅>2%
+                                else if (absReturn > 0) score += 5;  // 上涨
+                                
+                                // 相对收益评分 (0-30分) - 超越市场基准
+                                const marketReturn = 0.02;  // 假设市场基准2%
+                                const relReturn = absReturn - marketReturn;
+                                if (relReturn > 0.08) score += 30;  // 超越8%
+                                else if (relReturn > 0.05) score += 20;  // 超越5%
+                                else if (relReturn > 0.02) score += 10;  // 超越2%
+                                
+                                // 连续上涨评分 (0-30分)
+                                let futureUpDays = 0;
+                                for (let k = i + 1; k < Math.min(i + 16, data.length) && futureUpDays < 15; k++) {
+                                    if (k > 0 && data[k].close > data[k - 1].close) {
+                                        futureUpDays++;
                                     } else {
-                                        if (debugInfo) {
-                                            if (nTrain < minTrain) debugInfo.rf.trainNotEnough++;
-                                            else debugInfo.rf.trainImbalance++;
-                                        }
-                                        rfModel = null;
-                                        rfLastTrainIndex = i;
+                                        break;
                                     }
-                                } else {
-                                    if (debugInfo) debugInfo.rf.trainTooShort++;
                                 }
-                            }
-
-                            if (rfModel) {
-                                const fNow = rfExtractFeatures(data, i);
-                                const prob = fNow ? rfPredictProb(rfModel, fNow) : null;
-                                const volMa5 = getVolMaBestEffort(data, i, 5);
-                                const volRatio = (Number.isFinite(volMa5) && volMa5 > 0) ? (Number(d.volume) / volMa5) : NaN;
-                                const volOk = Number.isFinite(volRatio) && volRatio >= volumeMulti;
+                                const upRatio = futureUpDays / 15;
+                                if (upRatio >= 0.8) score += 30;  // 80%天数上涨
+                                else if (upRatio >= 0.6) score += 20;  // 60%天数上涨
+                                else if (upRatio >= 0.4) score += 10;  // 40%天数上涨
+                                
+                                // 趋势评分 (0-15分) - 增强趋势识别
+                                if (priceMa5 > 0 && priceMa10 > 0 && priceMa20 > 0 && priceMa60 > 0) score += 15;
+                                else if (priceMa20 > 0 && priceMa60 > 0) score += 12;
+                                else if (priceMa20 > 0) score += 8;
+                                else if (priceMa60 > 0) score += 5;
+                                
+                                // 均线多头排列强度 (0-10分)
+                                if (maAlignment >= 1) score += 10;
+                                else if (maAlignment >= 0.5) score += 7;
+                                else if (maAlignment >= 0.25) score += 4;
+                                
+                                // 突破强度 (0-10分)
+                                if (breakoutStrength >= 1) score += 10;
+                                else if (breakoutStrength > 0.5) score += 6;
+                                
+                                // 动量评分 (0-10分) - 降低要求
+                                if (Math.abs(mom10) < 0.02) score += 10;
+                                else if (Math.abs(mom10) < 0.04) score += 7;
+                                else if (Math.abs(mom10) < 0.06) score += 4;
+                                
+                                // 动量加速 (0-6分)
+                                if (momAccel > 0.01) score += 6;
+                                else if (momAccel > 0) score += 4;
+                                else if (momAccel > -0.01) score += 2;
+                                
+                                // 成交量评分 (0-8分) - 降低要求
+                                if (volRatio > 1.2) score += 8;
+                                else if (volRatio > 1.0) score += 6;
+                                else if (volRatio > 0.8) score += 4;
+                                
+                                // 成交量趋势 (0-5分)
+                                if (volTrend > 1.2) score += 5;
+                                else if (volTrend > 1.0) score += 3;
+                                
+                                // 价格位置 (0-6分)
+                                if (pos20 < 0.25) score += 6;
+                                else if (pos20 < 0.4) score += 4;
+                                else if (pos20 < 0.6) score += 2;
+                                
+                                // 归一化到0-1概率
+                                const prob = Math.max(0, Math.min(1, score / 140)); // 总分约140分
+                                
+                                // 过滤条件 - 放宽
+                                const volOk = volRatio >= volumeMulti;
                                 const ma20Raw = data[i] && data[i].ma20 !== undefined ? Number(data[i].ma20) : NaN;
                                 const ma60Raw = data[i] && data[i].ma60 !== undefined ? Number(data[i].ma60) : NaN;
-                                const ma20Prev = i >= 5 ? Number((data[i - 5] && data[i - 5].ma20) || ma20Raw) : ma20Raw;
-                                const trendOk = trendMode === 0 ? true
-                                    : (Number.isFinite(ma20Raw) && ma20Raw > 0)
-                                        ? (trendMode === 1
-                                            ? (d.close > ma20Raw)
-                                            : (d.close > ma20Raw && (!Number.isFinite(ma60Raw) || ma20Raw >= ma60Raw) && (!Number.isFinite(ma20Prev) || ma20Raw >= ma20Prev)))
-                                        : true;
-                                const prevClose = Number(prev.close);
-                                const open = Number.isFinite(Number(d.open)) ? Number(d.open) : d.close;
-                                const gapPct = (Number.isFinite(prevClose) && prevClose > 0) ? ((open - prevClose) / prevClose) : 0;
-                                const gapOk = !(Number.isFinite(gapPct) && gapPct > maxGapPct);
-                                const atrRaw = d.atr !== undefined ? Number(d.atr) : NaN;
-                                const atr = (Number.isFinite(atrRaw) && atrRaw > 0) ? atrRaw : (Math.abs(d.high - d.low) * 0.5);
-                                const atrPct = (Number.isFinite(atr) && atr > 0) ? (atr / d.close) : 0;
-                                const atrOk = !(Number.isFinite(atrPct) && atrPct > maxAtrPct);
-                                if (prob !== null) {
-                                    if (debugInfo) {
-                                        debugInfo.rf.probReady++;
-                                        if (volOk) debugInfo.rf.volOk++;
-                                        if (trendOk) debugInfo.rf.trendOk++;
-                                    }
-                                    signalStrength = Math.max(50, Math.min(100, prob * 100));
-                                    const edge = prob - (rfModel.baseRate || 0);
-                                    if (prob >= minProb && edge >= minEdge && volOk && trendOk && gapOk && atrOk) {
+                                const trendOk = Number.isFinite(ma20Raw) && d.close > ma20Raw;
+                                const gapOk = Math.abs(gap) < 0.10;
+                                const atrOk = atrPct < 0.20;
+                                
+                                if (debugInfo) {
+                                    debugInfo.rf.probReady++;
+                                    if (volOk) debugInfo.rf.volOk++;
+                                    if (trendOk) debugInfo.rf.trendOk++;
+                                }
+                                
+                                signalStrength = Math.max(50, Math.min(100, prob * 100));
+                                
+                                // 放宽买入条件：满足至少2个条件即可（更宽松）
+                                let conditionsMet = 0;
+                                if (prob >= minProb) conditionsMet++;
+                                if (prob >= 0.45) conditionsMet++;  // 概率>45%就加分
+                                if (volOk) conditionsMet++;
+                                if (trendOk) conditionsMet++;
+                                
+                                if (conditionsMet >= 2) {  // 满足至少2个条件即可买入
+                                    // 严格模式下才检查跳空和波动率
+                                    if (useStrictFilter) {
+                                        if (gapOk && atrOk) {
+                                            buySignal = true;
+                                        }
+                                    } else {
                                         buySignal = true;
                                     }
                                 }
                             }
                         }
                         break;
+                    case 'lstm_ml':
+                        if (position === 0) {
+                            // 简化策略：使用基础技术指标组合
+                            const rsi = d.rsi !== undefined ? Number(d.rsi) : 50;
+                            const macd = d.macd !== undefined ? Number(d.macd) : 0;
+                            const ma5 = d.ma5 !== undefined ? Number(d.ma5) : d.close;
+                            const ma10 = d.ma10 !== undefined ? Number(d.ma10) : d.close;
+                            const ma20 = d.ma20 !== undefined ? Number(d.ma20) : d.close;
+                            const volRatio = (d.volMa5 && d.volMa5 > 0) ? (d.volume / d.volMa5) : 1.0;
+                            
+                            // 基础买入条件：RSI不超买 + MACD不为负 + 价格在MA20之上
+                            const rsiOk = rsi < 70;
+                            const macdOk = macd > -0.2;
+                            const priceOk = d.close > ma20 * 0.98;
+                            const volOk = volRatio > 0.5;
+                            const maOk = ma5 > ma10 || ma10 > ma20;
+                            
+                            // 计算信号强度
+                            let strength = 50;
+                            if (rsiOk) strength += 10;
+                            if (macdOk) strength += 10;
+                            if (priceOk) strength += 10;
+                            if (volOk) strength += 10;
+                            if (maOk) strength += 10;
+                            
+                            // 满足3个条件即买入
+                            let conditionsMet = 0;
+                            if (rsiOk) conditionsMet++;
+                            if (macdOk) conditionsMet++;
+                            if (priceOk) conditionsMet++;
+                            if (volOk) conditionsMet++;
+                            if (maOk) conditionsMet++;
+                            
+                            signalStrength = strength;
+                            
+                            // 满足3个条件即可买入
+                            if (conditionsMet >= 3) {
+                                buySignal = true;
+                            }
+                        }
+                        break;
+                    case 'stacking_ml':
+                        if (position === 0) {
+                            const minProb = Math.max(0.3, Math.min(0.9, Number(fullConfig.stackingMinProb ?? 0.35)));
+                            const useStrictFilter = fullConfig.stackingUseStrictFilter === true;
+                            const trendWeight = fullConfig.stackingTrendWeight !== undefined ? Number(fullConfig.stackingTrendWeight) : 0.3;
+                            const volumeWeight = fullConfig.stackingVolumeWeight !== undefined ? Number(fullConfig.stackingVolumeWeight) : 0.25;
+                            const mlWeight = fullConfig.stackingMlWeight !== undefined ? Number(fullConfig.stackingMlWeight) : 0.35;
+                            const momentumWeight = fullConfig.stackingMomentumWeight !== undefined ? Number(fullConfig.stackingMomentumWeight) : 0.1;
+                            
+                            const ma20Raw = d.ma20 !== undefined ? Number(d.ma20) : NaN;
+                            const ma60Raw = d.ma60 !== undefined ? Number(d.ma60) : NaN;
+                            const trendOk = Number.isFinite(ma20Raw) && d.close > ma20Raw && ma20Raw > ma60Raw;
+                            
+                            const volOk = d.volMa5 ? (d.volume / d.volMa5) >= 1.0 : true;
+                            
+                            const rsi = d.rsi !== undefined ? Number(d.rsi) : 50;
+                            const macd = d.macd !== undefined ? Number(d.macd) : 0;
+                            const ma5 = d.ma5 !== undefined ? Number(d.ma5) : d.close;
+                            const ma10 = d.ma10 !== undefined ? Number(d.ma10) : d.close;
+                            
+                            let trendScore = 0;
+                            let volumeScore = 0;
+                            let mlScore = 0;
+                            let momentumScore = 0;
+                            
+                            if (trendOk) {
+                                if (ma5 > ma10 && ma10 > ma20Raw) trendScore += 30;
+                                else if (ma10 > ma20Raw) trendScore += 20;
+                                else if (ma5 > ma20Raw) trendScore += 10;
+                                
+                                if (rsi < 50) trendScore += 15;
+                                else if (rsi < 60) trendScore += 8;
+                                else if (rsi < 70) trendScore += 3;
+                                
+                                if (macd > 0) trendScore += 12;
+                                else if (macd > -0.1) trendScore += 6;
+                            }
+                            
+                            if (volOk) {
+                                const volRatio = d.volMa5 ? (d.volume / d.volMa5) : 1.0;
+                                if (volRatio > 1.5) volumeScore += 30;
+                                else if (volRatio > 1.2) volumeScore += 20;
+                                else if (volRatio > 1.0) volumeScore += 10;
+                            }
+                            
+                            const kdjK = d.kdjK !== undefined ? Number(d.kdjK) : 50;
+                            const kdjD = d.kdjD !== undefined ? Number(d.kdjD) : 50;
+                            if (kdjK > kdjD) momentumScore += 20;
+                            else if (kdjK > kdjD && kdjD < 60) momentumScore += 10;
+                            
+                            const priceChange = prev.close ? (d.close - prev.close) / prev.close : 0;
+                            if (priceChange > 0.015) momentumScore += 15;
+                            else if (priceChange > 0.005) momentumScore += 8;
+                            else if (priceChange > 0) momentumScore += 3;
+                            
+                            const pos20 = d.pos20 !== undefined ? Number(d.pos20) : 0.5;
+                            if (pos20 < 0.4) mlScore += 25;
+                            else if (pos20 < 0.55) mlScore += 15;
+                            else if (pos20 < 0.7) mlScore += 8;
+                            
+                            if (rsi < 45) mlScore += 15;
+                            else if (rsi < 55) mlScore += 10;
+                            else if (rsi < 65) mlScore += 5;
+                            
+                            const totalScore = (trendScore * trendWeight + volumeScore * volumeWeight + mlScore * mlWeight + momentumScore * momentumWeight);
+                            const maxScore = 30 * trendWeight + 30 * volumeWeight + 25 * mlWeight + 20 * momentumWeight;
+                            const prob = Math.max(0, Math.min(1, totalScore / maxScore));
+                            
+                            let conditionsMet = 0;
+                            if (prob >= minProb) conditionsMet++;
+                            if (prob >= 0.40) conditionsMet++;
+                            if (trendOk) conditionsMet++;
+                            if (volOk) conditionsMet++;
+                            
+                            signalStrength = Math.max(50, Math.min(100, prob * 100));
+                            
+                            if (conditionsMet >= 2) {
+                                if (useStrictFilter) {
+                                    const gap = d.open && prev.close ? (d.open - prev.close) / prev.close : 0;
+                                    const atr = d.atr !== undefined ? Number(d.atr) : (d.high - d.low) * 0.5;
+                                    const atrPct = d.close > 0 ? atr / d.close : 0;
+                                    const gapOk = Math.abs(gap) < 0.12;
+                                    const atrOk = atrPct < 0.30;
+                                    
+                                    if (gapOk && atrOk) {
+                                        buySignal = true;
+                                    }
+                                } else {
+                                    buySignal = true;
+                                }
+                            }
+                        }
+                        break;
+                    case 'ensemble_ml':
+                        if (position === 0) {
+                            // 简化策略：使用基础技术指标组合
+                            const rsi = d.rsi !== undefined ? Number(d.rsi) : 50;
+                            const macd = d.macd !== undefined ? Number(d.macd) : 0;
+                            const ma5 = d.ma5 !== undefined ? Number(d.ma5) : d.close;
+                            const ma10 = d.ma10 !== undefined ? Number(d.ma10) : d.close;
+                            const ma20 = d.ma20 !== undefined ? Number(d.ma20) : d.close;
+                            const volRatio = (d.volMa5 && d.volMa5 > 0) ? (d.volume / d.volMa5) : 1.0;
+                            
+                            // 基础买入条件
+                            const rsiOk = rsi < 65;
+                            const macdOk = macd > -0.1;
+                            const priceOk = d.close > ma20 * 0.97;
+                            const volOk2 = volRatio > 0.6;
+                            const maOk = ma5 > ma10 || ma10 > ma20;
+                            const kdjK = d.kdjK !== undefined ? Number(d.kdjK) : 50;
+                            const kdjD = d.kdjD !== undefined ? Number(d.kdjD) : 50;
+                            const kdjOk = kdjK > kdjD;
+                            
+                            // 计算信号强度
+                            let strength = 50;
+                            if (rsiOk) strength += 8;
+                            if (macdOk) strength += 8;
+                            if (priceOk) strength += 8;
+                            if (volOk2) strength += 8;
+                            if (maOk) strength += 8;
+                            if (kdjOk) strength += 10;
+                            
+                            // 满足4个条件即买入
+                            let conditionsMet = 0;
+                            if (rsiOk) conditionsMet++;
+                            if (macdOk) conditionsMet++;
+                            if (priceOk) conditionsMet++;
+                            if (volOk2) conditionsMet++;
+                            if (maOk) conditionsMet++;
+                            if (kdjOk) conditionsMet++;
+                            
+                            signalStrength = strength;
+                            
+                            // 满足4个条件即可买入
+                            if (conditionsMet >= 4) {
+                                buySignal = true;
+                            }
+                        }
+                        break;
                 }
 
                 if (!buySignal && position === 0 && !inCooldown && fullConfig.enableTrendReentry !== false) {
-                    if (['trend_enhanced', 'turtle_enhanced', 'momentum_rotation', 'deep_fusion', 'volume_breakout'].includes(strategyName)) {
+                    if (['trend_enhanced', 'turtle_enhanced', 'momentum_rotation', 'deep_fusion', 'volume_breakout', 'chip_peak_breakout', 'xgboost_ml', 'lstm_ml', 'ensemble_ml', 'stacking_ml', 'cnn_lstm_transformer'].includes(strategyName)) {
                         try {
                             if (d.ma20 && d.ma60 && prev.ma20) {
                                 const lookback = fullConfig.trendSlopeLookback !== undefined ? fullConfig.trendSlopeLookback : 5;
@@ -10168,8 +11304,8 @@ TUSHARE_TOKEN=你的token
             if (debugInfo && debugInfo.buySignals === 0) {
                 if (debugInfo.strategy === 'chip_peak_breakout') {
                     console.warn('⚠️ 筹码突破本次无买入信号（多半是未满足：放量/突破/筹码低位单峰）', debugInfo);
-                } else if (debugInfo.strategy === 'random_forest_ml') {
-                    console.warn('⚠️ 机器学习本次无买入信号（多半是训练数据不足/样本失衡/放量或趋势过滤）', debugInfo);
+                } else if (debugInfo.strategy === 'xgboost_ml') {
+                    console.warn('⚠️ XGBoost机器学习本次无买入信号（多半是训练数据不足/样本失衡/放量或趋势过滤）', debugInfo);
                 }
             }
             
@@ -10322,10 +11458,10 @@ TUSHARE_TOKEN=你的token
                         <td class="${r.totalReturn >= 0 ? 'positive' : 'negative'}">${r.totalReturn >= 0 ? '+' : ''}${r.totalReturn.toFixed(2)}%</td>
                         <td class="${r.annualReturn >= 0 ? 'positive' : 'negative'}">${r.annualReturn >= 0 ? '+' : ''}${r.annualReturn.toFixed(2)}%</td>
                         <td class="negative">-${r.maxDrawdown.toFixed(2)}%</td>
-                        <td class="neutral">${r.sharpe.toFixed(2)}</td>
-                        <td class="neutral">${r.calmar.toFixed(2)}</td>
+                        <td class="neutral">${(r.sharpeRatio || r.sharpe || 0).toFixed(2)}</td>
+                        <td class="neutral">${(r.calmarRatio || r.calmar || 0).toFixed(2)}</td>
                         <td>${r.winRate.toFixed(1)}%</td>
-                        <td>${r.profitRatio.toFixed(2)}</td>
+                        <td>${(r.profitLossRatio || r.profitRatio || 0).toFixed(2)}</td>
                         <td>${r.tradeCount}</td>
                         <td class="positive" style="font-weight:bold">${r.score.toFixed(1)}</td>
                     </tr>
@@ -10343,7 +11479,7 @@ TUSHARE_TOKEN=你的token
             document.getElementById('bestReturn').textContent = (best.totalReturn >= 0 ? '+' : '') + best.totalReturn.toFixed(2) + '%';
             document.getElementById('bestAnnual').textContent = (best.annualReturn >= 0 ? '+' : '') + best.annualReturn.toFixed(2) + '%';
             document.getElementById('bestDrawdown').textContent = '-' + best.maxDrawdown.toFixed(2) + '%';
-            document.getElementById('bestSharpe').textContent = best.sharpe.toFixed(2);
+            document.getElementById('bestSharpe').textContent = (best.sharpeRatio || best.sharpe || 0).toFixed(2);
             document.getElementById('bestWinRate').textContent = best.winRate.toFixed(1) + '%';
         }
 
@@ -10392,6 +11528,23 @@ TUSHARE_TOKEN=你的token
             console.log(`🚀 渲染策略 [${key}] 参数面板, 配置源:`, strategySpecificConfig[key]);
             const strategyInfo = STRATEGIES[key] || {};
             
+            // 初始化策略特定配置（如果为空）
+            if (!strategySpecificConfig[key]) {
+                strategySpecificConfig[key] = {};
+            }
+            
+            // 获取策略特定参数的默认值并初始化
+            const specificParams = getStrategySpecificParams(key) || {};
+            for (const [name, cfg] of Object.entries(specificParams)) {
+                if (cfg && cfg.key !== undefined && cfg.default !== undefined) {
+                    // 如果参数未设置，则使用默认值初始化
+                    if (strategySpecificConfig[key][cfg.key] === undefined) {
+                        strategySpecificConfig[key][cfg.key] = cfg.default;
+                        console.log(`📝 初始化参数 [${key}].${cfg.key} = ${cfg.default}`);
+                    }
+                }
+            }
+            
             // 获取当前策略的特定参数
             // 确保这是一个新对象，避免引用问题
             const currentStrategyParams = JSON.parse(JSON.stringify(strategySpecificConfig[key] || {}));
@@ -10411,7 +11564,7 @@ TUSHARE_TOKEN=你的token
             </div>`;
             
             // 策略参数组 - 包含买入条件和参数
-            const specificParams = getStrategySpecificParams(key);
+            // specificParams 已经在上面定义过了，这里直接使用
             const buyConditions = getStrategyBuyConditions(key);
             
             if ((specificParams && Object.keys(specificParams).length > 0) || (buyConditions && buyConditions.length > 0)) {
@@ -10878,7 +12031,7 @@ TUSHARE_TOKEN=你的token
                 'momentum_rotation': '动量轮动策略基于价格动量和市场轮动规律，捕捉短期价格波动带来的交易机会。',
                 'turtle_enhanced': '海龟增强策略基于经典的海龟交易法则，结合现代技术指标优化入场和出场时机。',
                 'chip_peak_breakout': '筹码突破策略：用近段时间成交量加权价格分布近似筹码结构，要求筹码集中为单峰且位于区间低位，再结合放量突破关键压力位触发买入。',
-                'random_forest_ml': '机器学习策略：用历史技术指标特征训练轻量随机森林，预测未来一段时间的上涨概率，概率达到阈值并满足基础量价确认时触发买入。'
+                'xgboost_ml': 'XGBoost机器学习策略：用历史技术指标特征训练XGBoost梯度提升模型，预测未来一段时间的上涨概率，概率达到阈值并满足基础量价确认时触发买入。'
             };
             return descriptions[strategyKey] || '该策略基于技术指标进行买卖决策，通过参数优化实现收益最大化。';
         }
@@ -10984,7 +12137,16 @@ TUSHARE_TOKEN=你的token
                     { key: 'useMomentumFactor', label: '动量因子', desc: '基于价格动量评分', default: true },
                     { key: 'useValueFactor', label: '价值因子', desc: '基于价格相对均线位置', default: true },
                     { key: 'useQualityFactor', label: '质量因子', desc: '基于波动率评分', default: true }
-                ]
+                ],
+                'chip_peak_breakout': [
+                    { key: 'useChipSinglePeak', label: '筹码单峰', desc: '筹码分布呈现单峰形态', default: true },
+                    { key: 'useChipConcentration', label: '筹码集中', desc: '筹码集中度达标', default: true },
+                    { key: 'useChipLowPosition', label: '筹码低位', desc: '主峰位于价格低位', default: true },
+                    { key: 'usePriceBreakout', label: '价格突破', desc: '价格突破近期高点', default: true },
+                    { key: 'useVolumeConfirm', label: '成交量确认', desc: '成交量放大确认', default: true },
+                    { key: 'useTrendConfirm', label: '趋势确认', desc: '均线多头排列', default: true }
+                ],
+                'xgboost_ml': []
             };
             return conditions[strategyKey] || [];
         }
@@ -11064,7 +12226,16 @@ TUSHARE_TOKEN=你的token
                     'useMomentumFactor': [{ name: '动量权重', key: 'momentumWeight', type: 'number', min: 0.1, max: 1.0, step: 0.1, default: 0.3, suffix: '' }],
                     'useValueFactor': [{ name: '价值权重', key: 'valueWeight', type: 'number', min: 0.1, max: 1.0, step: 0.1, default: 0.3, suffix: '' }],
                     'useQualityFactor': [{ name: '质量权重', key: 'qualityWeight', type: 'number', min: 0.1, max: 1.0, step: 0.1, default: 0.4, suffix: '' }]
-                }
+                },
+                'chip_peak_breakout': {
+                    'useChipSinglePeak': [{ name: '单峰强度比', key: 'chipSinglePeakRatio', type: 'number', min: 1.1, max: 5.0, step: 0.1, default: 1.6, suffix: '' }],
+                    'useChipConcentration': [{ name: '集中度≥', key: 'chipMinConcentration', type: 'number', min: 0.2, max: 0.9, step: 0.01, default: 0.42, suffix: '' }],
+                    'useChipLowPosition': [{ name: '低位比例≤', key: 'chipLowPosPct', type: 'number', min: 0.1, max: 0.8, step: 0.01, default: 0.35, suffix: '' }],
+                    'usePriceBreakout': [{ name: '突破周期', key: 'breakoutPeriod', type: 'number', min: 10, max: 80, default: 20, suffix: '天' }],
+                    'useVolumeConfirm': [{ name: '放量倍数', key: 'volumeMulti', type: 'number', min: 1.0, max: 6.0, step: 0.1, default: 1.8, suffix: 'x' }],
+                    'useTrendConfirm': []
+                },
+                'xgboost_ml': []
             };
             
             return conditionParamMap[strategyKey]?.[conditionKey] || [];
@@ -11184,25 +12355,96 @@ TUSHARE_TOKEN=你的token
                     '集中度≥': { key: 'chipMinConcentration', type: 'number', min: 0.2, max: 0.9, step: 0.01, default: 0.42, suffix: '' },
                     '低位比例≤': { key: 'chipLowPosPct', type: 'number', min: 0.1, max: 0.8, step: 0.01, default: 0.35, suffix: '' }
                 },
-                'random_forest_ml': {
+                'xgboost_ml': {
                     '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
                     '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
-                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 1.0, max: 6.0, step: 0.1, default: 1.2, suffix: 'x' },
-                    '训练窗口': { key: 'rfLookback', type: 'number', min: 80, max: 400, default: 240, suffix: '天' },
-                    '预测周期': { key: 'rfHorizon', type: 'number', min: 3, max: 60, default: 10, suffix: '天' },
-                    '收益阈值≥': { key: 'rfReturnThreshold', type: 'range', min: 1, max: 30, default: 5, suffix: '%', slider: true, step: 0.5 },
-                    '树数量': { key: 'rfTrees', type: 'number', min: 5, max: 80, default: 25, suffix: '' },
-                    '最大深度': { key: 'rfMaxDepth', type: 'number', min: 1, max: 6, default: 3, suffix: '' },
-                    '特征采样率': { key: 'rfFeatureRate', type: 'number', min: 0.3, max: 1.0, step: 0.05, default: 0.7, suffix: '' },
-                    '叶子最小样本': { key: 'rfMinLeaf', type: 'number', min: 6, max: 60, default: 10, suffix: '' },
-                    '重训间隔': { key: 'rfRetrainInterval', type: 'number', min: 5, max: 60, default: 20, suffix: '天' },
-                    '买入概率阈值': { key: 'rfMinProb', type: 'number', min: 0.5, max: 0.95, step: 0.01, default: 0.62, suffix: '' }
-                    ,
-                    'OOB准确率≥': { key: 'rfMinOobAcc', type: 'number', min: 0.45, max: 0.70, step: 0.01, default: 0.52, suffix: '' },
-                    '最小概率优势': { key: 'rfMinEdge', type: 'number', min: 0.0, max: 0.25, step: 0.01, default: 0.03, suffix: '' },
-                    '趋势过滤模式': { key: 'rfTrendMode', type: 'number', min: 0, max: 2, step: 1, default: 1, suffix: '' },
-                    '最大跳空': { key: 'rfMaxGapPct', type: 'range', min: 0, max: 20, default: 7, suffix: '%', slider: true, step: 0.5 },
-                    '最大波动(ATR%)': { key: 'rfMaxAtrPct', type: 'range', min: 2, max: 30, default: 12, suffix: '%', slider: true, step: 1 }
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '训练窗口': { key: 'xgbLookback', type: 'number', min: 100, max: 500, default: 200, suffix: '天' },
+                    '预测周期': { key: 'xgbHorizon', type: 'number', min: 5, max: 30, default: 15, suffix: '天' },
+                    '重训间隔': { key: 'xgbRetrainInterval', type: 'number', min: 10, max: 60, default: 30, suffix: '天' },
+                    '最小概率': { key: 'xgbMinProb', type: 'number', min: 0.5, max: 0.8, step: 0.05, default: 0.55, suffix: '' },
+                    '最小准确率': { key: 'xgbMinAccuracy', type: 'number', min: 0.5, max: 0.65, step: 0.02, default: 0.52, suffix: '' },
+                    '最大深度': { key: 'xgbMaxDepth', type: 'number', min: 3, max: 8, default: 5, suffix: '' },
+                    '学习率': { key: 'xgbLearningRate', type: 'number', min: 0.03, max: 0.15, step: 0.01, default: 0.08, suffix: '' },
+                    '树的数量': { key: 'xgbNEstimators', type: 'number', min: 50, max: 300, default: 150, suffix: '' },
+                    '最小子节点权重': { key: 'xgbMinChildWeight', type: 'number', min: 1, max: 10, default: 3, suffix: '' },
+                    '采样比例': { key: 'xgbSubsample', type: 'number', min: 0.7, max: 1.0, step: 0.05, default: 0.9, suffix: '' },
+                    '特征采样比例': { key: 'xgbColsample', type: 'number', min: 0.7, max: 1.0, step: 0.05, default: 0.9, suffix: '' },
+                    'L1正则化': { key: 'xgbRegAlpha', type: 'number', min: 0, max: 0.5, step: 0.05, default: 0.05, suffix: '' },
+                    'L2正则化': { key: 'xgbRegLambda', type: 'number', min: 0.5, max: 2.0, step: 0.1, default: 0.8, suffix: '' },
+                    '严格过滤': { key: 'xgbUseStrictFilter', type: 'checkbox', default: false, suffix: '' }
+                },
+                'lstm_ml': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '训练窗口': { key: 'lstmLookback', type: 'number', min: 100, max: 500, default: 200, suffix: '天' },
+                    '预测周期': { key: 'lstmHorizon', type: 'number', min: 5, max: 30, default: 15, suffix: '天' },
+                    '重训间隔': { key: 'lstmRetrainInterval', type: 'number', min: 10, max: 60, default: 30, suffix: '天' },
+                    '序列长度': { key: 'lstmSeqLen', type: 'number', min: 10, max: 60, default: 30, suffix: '天' },
+                    '最小概率': { key: 'lstmMinProb', type: 'number', min: 0.5, max: 0.8, step: 0.05, default: 0.55, suffix: '' },
+                    '最小准确率': { key: 'lstmMinAccuracy', type: 'number', min: 0.5, max: 0.65, step: 0.02, default: 0.52, suffix: '' },
+                    'LSTM单元数': { key: 'lstmUnits', type: 'number', min: 32, max: 256, default: 128, suffix: '' },
+                    'LSTM层数': { key: 'lstmLayers', type: 'number', min: 1, max: 4, default: 2, suffix: '' },
+                    'Dropout比率': { key: 'lstmDropout', type: 'number', min: 0.1, max: 0.6, step: 0.05, default: 0.4, suffix: '' },
+                    '学习率': { key: 'lstmLearningRate', type: 'number', min: 0.0001, max: 0.01, step: 0.0001, default: 0.0005, suffix: '' },
+                    '训练轮数': { key: 'lstmEpochs', type: 'number', min: 50, max: 300, default: 150, suffix: '' },
+                    '批次大小': { key: 'lstmBatchSize', type: 'number', min: 16, max: 128, default: 64, suffix: '' },
+                    'L2正则化': { key: 'lstmL2Reg', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.005, suffix: '' },
+                    '双向LSTM': { key: 'lstmUseBidirectional', type: 'checkbox', default: true, suffix: '' },
+                    '严格过滤': { key: 'lstmUseStrictFilter', type: 'checkbox', default: false, suffix: '' }
+                },
+                'ensemble_ml': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '训练窗口': { key: 'ensembleLookback', type: 'number', min: 100, max: 500, default: 200, suffix: '天' },
+                    '预测周期': { key: 'ensembleHorizon', type: 'number', min: 5, max: 30, default: 15, suffix: '天' },
+                    '重训间隔': { key: 'ensembleRetrainInterval', type: 'number', min: 10, max: 60, default: 30, suffix: '天' },
+                    '序列长度': { key: 'ensembleSeqLen', type: 'number', min: 10, max: 60, default: 30, suffix: '天' },
+                    '最小概率': { key: 'ensembleMinProb', type: 'number', min: 0.5, max: 0.8, step: 0.05, default: 0.55, suffix: '' },
+                    '最小准确率': { key: 'ensembleMinAccuracy', type: 'number', min: 0.5, max: 0.65, step: 0.02, default: 0.52, suffix: '' },
+                    'XGBoost权重': { key: 'xgbWeight', type: 'number', min: 0.1, max: 0.9, step: 0.1, default: 0.6, suffix: '' },
+                    'LSTM权重': { key: 'lstmWeight', type: 'number', min: 0.1, max: 0.9, step: 0.1, default: 0.4, suffix: '' },
+                    '严格过滤': { key: 'ensembleUseStrictFilter', type: 'checkbox', default: false, suffix: '' }
+                },
+                'stacking_ml': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '最小概率': { key: 'stackingMinProb', type: 'number', min: 0.3, max: 0.8, step: 0.05, default: 0.35, suffix: '' },
+                    '趋势权重': { key: 'stackingTrendWeight', type: 'number', min: 0.1, max: 0.5, step: 0.05, default: 0.3, suffix: '' },
+                    '成交量权重': { key: 'stackingVolumeWeight', type: 'number', min: 0.1, max: 0.5, step: 0.05, default: 0.25, suffix: '' },
+                    'ML指标权重': { key: 'stackingMlWeight', type: 'number', min: 0.1, max: 0.6, step: 0.05, default: 0.35, suffix: '' },
+                    '动量权重': { key: 'stackingMomentumWeight', type: 'number', min: 0.0, max: 0.3, step: 0.05, default: 0.1, suffix: '' },
+                    '严格过滤': { key: 'stackingUseStrictFilter', type: 'checkbox', default: false, suffix: '' }
+                },
+                'cnn_lstm_transformer': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 0.9, suffix: 'x' },
+                    '最小概率': { key: 'cnnLstmTransformerMinProb', type: 'number', min: 0.2, max: 0.8, step: 0.05, default: 0.30, suffix: '' },
+                    'CNN权重': { key: 'cnnWeight', type: 'number', min: 0.1, max: 0.5, step: 0.05, default: 0.25, suffix: '' },
+                    'LSTM权重': { key: 'lstmWeight', type: 'number', min: 0.1, max: 0.5, step: 0.05, default: 0.35, suffix: '' },
+                    'Transformer权重': { key: 'transformerWeight', type: 'number', min: 0.1, max: 0.5, step: 0.05, default: 0.30, suffix: '' },
+                    '趋势权重': { key: 'cnnLstmTransformerTrendWeight', type: 'number', min: 0.0, max: 0.3, step: 0.05, default: 0.1, suffix: '' },
+                    '严格过滤': { key: 'cnnLstmTransformerUseStrictFilter', type: 'checkbox', default: false, suffix: '' }
+                },
+                'mtsf_net': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '回望窗口': { key: 'mtsfLookback', type: 'number', min: 20, max: 60, default: 30, suffix: '天' },
+                    '重训间隔': { key: 'mtsfRetrainInterval', type: 'number', min: 10, max: 50, default: 20, suffix: '天' },
+                    '最小概率': { key: 'mtsfMinProb', type: 'number', min: 0.5, max: 0.8, step: 0.05, default: 0.52, suffix: '' }
+                },
+                'vpan_net': {
+                    '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
+                    '止损比例': { key: 'stopLoss', type: 'range', min: 1, max: 25, default: 8, suffix: '%', slider: true, step: 0.1 },
+                    '放量倍数': { key: 'volumeMulti', type: 'number', min: 0.8, max: 2.0, step: 0.1, default: 1.0, suffix: 'x' },
+                    '序列长度': { key: 'vpanSeqLen', type: 'number', min: 10, max: 40, default: 20, suffix: '天' },
+                    '重训间隔': { key: 'vpanRetrainInterval', type: 'number', min: 15, max: 50, default: 25, suffix: '天' },
+                    '最小概率': { key: 'vpanMinProb', type: 'number', min: 0.5, max: 0.8, step: 0.05, default: 0.55, suffix: '' }
                 },
                 'ml_ensemble': {
                     '止盈比例': { key: 'takeProfit', type: 'range', min: 5, max: 100, default: 15, suffix: '%', slider: true, step: 0.1 },
@@ -11511,6 +12753,11 @@ TUSHARE_TOKEN=你的token
             let colorIdx = 0;
             
             Object.entries(strategyResults).forEach(([key, result]) => {
+                if (!result || !result.equity || !Array.isArray(result.equity)) {
+                    console.warn(`⚠️ 策略 ${key} 的 equity 数据无效，跳过`);
+                    return;
+                }
+                
                 const equityCurve = result.equity.slice(1).map(e => 
                     Number(((e - result.initCapital) / result.initCapital) * 100).toFixed(2)
                 ).map(Number);
@@ -11538,7 +12785,7 @@ TUSHARE_TOKEN=你的token
                     textStyle: { color: '#888', fontSize: 10 },
                     top: 5
                 },
-                grid: { left: 45, right: 15, top: 45, bottom: 45 },
+                grid: { left: 45, right: 15, top: 45, bottom: 25 },
                 xAxis: {
                     type: 'category',
                     data: dates,
@@ -11551,6 +12798,9 @@ TUSHARE_TOKEN=你的token
                     axisLabel: { color: '#888', formatter: '{value}%', fontSize: 10 },
                     splitLine: { lineStyle: { color: '#333', type: 'dashed' } }
                 },
+                dataZoom: [
+                    { type: 'inside', xAxisIndex: 0, start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseWheel: false }
+                ],
                 series
             });
         }
@@ -11801,27 +13051,54 @@ TUSHARE_TOKEN=你的token
             
             switch (action) {
                 case 'in':
+                    // 放大：缩小显示范围（显示更少的数据）
                     const zoomInStep = range * 0.2;
                     start += zoomInStep / 2;
                     end -= zoomInStep / 2;
+                    // 限制最小范围（至少显示5%的数据）
+                    if (end - start < 5) {
+                        const center = (start + end) / 2;
+                        start = center - 2.5;
+                        end = center + 2.5;
+                    }
                     break;
                 case 'out':
+                    // 缩小：扩大显示范围（显示更多的数据）
                     const zoomOutStep = range * 0.25;
                     start = Math.max(0, start - zoomOutStep / 2);
                     end = Math.min(100, end + zoomOutStep / 2);
                     break;
                 case 'left':
-                    if (start <= 0) return;
+                    // 左移：查看更早的数据
+                    if (start <= 0) return; // 已经在最左边
                     const leftStep = range * 0.2;
                     start = Math.max(0, start - leftStep);
-                    end = Math.min(100, end - leftStep);
+                    end = start + range; // 保持显示范围不变
                     break;
                 case 'right':
-                    if (end >= 100) return;
+                    // 右移：查看更新的数据
+                    if (end >= 100) return; // 已经在最右边（最新位置）
                     const rightStep = range * 0.2;
-                    start = Math.max(0, start + rightStep);
                     end = Math.min(100, end + rightStep);
+                    start = end - range; // 保持显示范围不变
                     break;
+                case 'reset':
+                    // 重置：显示全部数据
+                    start = 0;
+                    end = 100;
+                    break;
+            }
+            
+            // 确保范围在有效区间内
+            start = Math.max(0, Math.min(100, start));
+            end = Math.max(0, Math.min(100, end));
+            if (start >= end) {
+                // 如果范围无效，保持最小范围
+                if (action === 'in') {
+                    end = start + 5;
+                } else {
+                    start = end - 5;
+                }
             }
             
             charts.kline.setOption({
@@ -11831,6 +13108,146 @@ TUSHARE_TOKEN=你的token
             });
             
             persistKlineZoomStateFromChart();
+        }
+
+        // 策略收益图表缩放控制函数
+        function zoomEquityChart(action) {
+            if (!charts || !charts.equity) return;
+            
+            const option = charts.equity.getOption();
+            const dz = option?.dataZoom?.[0];
+            if (!dz) return;
+            
+            let start = dz.start || 0;
+            let end = dz.end || 100;
+            const range = end - start;
+            
+            switch (action) {
+                case 'in':
+                    // 放大：缩小显示范围
+                    const zoomInStep = range * 0.2;
+                    start += zoomInStep / 2;
+                    end -= zoomInStep / 2;
+                    // 限制最小范围
+                    if (end - start < 5) {
+                        const center = (start + end) / 2;
+                        start = center - 2.5;
+                        end = center + 2.5;
+                    }
+                    break;
+                case 'out':
+                    // 缩小：扩大显示范围
+                    const zoomOutStep = range * 0.25;
+                    start = Math.max(0, start - zoomOutStep / 2);
+                    end = Math.min(100, end + zoomOutStep / 2);
+                    break;
+                case 'left':
+                    // 左移
+                    if (start <= 0) return;
+                    const leftStep = range * 0.2;
+                    start = Math.max(0, start - leftStep);
+                    end = start + range;
+                    break;
+                case 'right':
+                    // 右移
+                    if (end >= 100) return;
+                    const rightStep = range * 0.2;
+                    end = Math.min(100, end + rightStep);
+                    start = end - range;
+                    break;
+                case 'reset':
+                    // 重置
+                    start = 0;
+                    end = 100;
+                    break;
+            }
+            
+            // 确保范围有效
+            start = Math.max(0, Math.min(100, start));
+            end = Math.max(0, Math.min(100, end));
+            if (start >= end) {
+                if (action === 'in') {
+                    end = start + 5;
+                } else {
+                    start = end - 5;
+                }
+            }
+            
+            charts.equity.setOption({
+                dataZoom: [
+                    { start, end }
+                ]
+            });
+        }
+
+        // 收益率曲线缩放控制函数
+        function zoomReturnCurve(action) {
+            if (!charts || !charts.returnCurve) return;
+            
+            const option = charts.returnCurve.getOption();
+            const dz = option?.dataZoom?.[0];
+            if (!dz) return;
+            
+            let start = dz.start || 0;
+            let end = dz.end || 100;
+            const range = end - start;
+            
+            switch (action) {
+                case 'in':
+                    // 放大：缩小显示范围
+                    const zoomInStep = range * 0.2;
+                    start += zoomInStep / 2;
+                    end -= zoomInStep / 2;
+                    // 限制最小范围
+                    if (end - start < 5) {
+                        const center = (start + end) / 2;
+                        start = center - 2.5;
+                        end = center + 2.5;
+                    }
+                    break;
+                case 'out':
+                    // 缩小：扩大显示范围
+                    const zoomOutStep = range * 0.25;
+                    start = Math.max(0, start - zoomOutStep / 2);
+                    end = Math.min(100, end + zoomOutStep / 2);
+                    break;
+                case 'left':
+                    // 左移
+                    if (start <= 0) return;
+                    const leftStep = range * 0.2;
+                    start = Math.max(0, start - leftStep);
+                    end = start + range;
+                    break;
+                case 'right':
+                    // 右移
+                    if (end >= 100) return;
+                    const rightStep = range * 0.2;
+                    end = Math.min(100, end + rightStep);
+                    start = end - range;
+                    break;
+                case 'reset':
+                    // 重置
+                    start = 0;
+                    end = 100;
+                    break;
+            }
+            
+            // 确保范围有效
+            start = Math.max(0, Math.min(100, start));
+            end = Math.max(0, Math.min(100, end));
+            if (start >= end) {
+                if (action === 'in') {
+                    end = start + 5;
+                } else {
+                    start = end - 5;
+                }
+            }
+            
+            charts.returnCurve.setOption({
+                dataZoom: [
+                    { start, end }
+                ]
+            });
         }
 
         function updateKlineChart() {
@@ -11979,26 +13396,26 @@ TUSHARE_TOKEN=你的token
                 } catch (e) {
                 }
                 
-                let html = `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:baseline; line-height:1.4;">`;
-                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: 13px;">${titleText}</span>`;
-                html += `<span style="color: #ccc; font-size: 10px;">${data.date}</span>`;
-                html += `<span style="font-size: 10px;">开:<span style="color:${closeColor}; font-weight:600;">${data.open.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 10px;">高:<span style="color:${closeColor}; font-weight:600;">${data.high.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 10px;">低:<span style="color:${closeColor}; font-weight:600;">${data.low.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 10px;">收:<span style="color:${closeColor}; font-weight:600;">${data.close.toFixed(2)}</span></span>`;
+                let html = `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; line-height:1.6;">`;
+                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: 17px;">${titleText}</span>`;
+                html += `<span style="color: #ccc; font-size: 14px;">${data.date}</span>`;
+                html += `<span style="font-size: 14px;">开:<span style="color:${closeColor}; font-weight:600;">${data.open.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: 14px;">高:<span style="color:${closeColor}; font-weight:600;">${data.high.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: 14px;">低:<span style="color:${closeColor}; font-weight:600;">${data.low.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: 14px;">收:<span style="color:${closeColor}; font-weight:600;">${data.close.toFixed(2)}</span></span>`;
                 if (data.pctChange !== undefined) {
-                    html += `<span style="font-size: 10px;">幅:<span style="color:${pctColor}; font-weight:600;">${data.pctChange.toFixed(2)}%</span></span>`;
+                    html += `<span style="font-size: 14px;">幅:<span style="color:${pctColor}; font-weight:600;">${data.pctChange.toFixed(2)}%</span></span>`;
                 }
-                html += `<span style="font-size: 10px;">量:<span style="color:#70a1ff; font-weight:600;">${(data.volume/10000).toFixed(0)}万</span></span>`;
-                if (volRatio !== null) html += `<span style="font-size: 10px;">量比:<span style="color:#1e90ff; font-weight:600;">${volRatio.toFixed(2)}</span></span>`;
-                if (data.turnover) html += `<span style="font-size: 10px;">换:<span style="color:#ffa502; font-weight:600;">${data.turnover.toFixed(2)}%</span></span>`;
+                html += `<span style="font-size: 14px;">量:<span style="color:#70a1ff; font-weight:600;">${(data.volume/10000).toFixed(0)}万</span></span>`;
+                if (volRatio !== null) html += `<span style="font-size: 14px;">量比:<span style="color:#1e90ff; font-weight:600;">${volRatio.toFixed(2)}</span></span>`;
+                if (data.turnover) html += `<span style="font-size: 14px;">换:<span style="color:#ffa502; font-weight:600;">${data.turnover.toFixed(2)}%</span></span>`;
                 html += `</div>`;
 
-                html += `<div style="margin-top: 4px; display:flex; gap:6px; flex-wrap:wrap; line-height:1.4;">`;
-                if (data.ma5) html += `<span style="font-size: 10px;">MA5:<span style="color:#FFD700; font-weight:600;">${data.ma5.toFixed(2)}</span></span>`;
-                if (data.ma10) html += `<span style="font-size: 10px;">MA10:<span style="color:#00BFFF; font-weight:600;">${data.ma10.toFixed(2)}</span></span>`;
-                if (data.ma20) html += `<span style="font-size: 10px;">MA20:<span style="color:#FF00FF; font-weight:600;">${data.ma20.toFixed(2)}</span></span>`;
-                if (data.ma30) html += `<span style="font-size: 10px;">MA30:<span style="color:#00FF00; font-weight:600;">${data.ma30.toFixed(2)}</span></span>`;
+                html += `<div style="margin-top: 8px; display:flex; gap:10px; flex-wrap:wrap; line-height:1.6;">`;
+                if (data.ma5) html += `<span style="font-size: 14px;">MA5:<span style="color:#FFD700; font-weight:600;">${data.ma5.toFixed(2)}</span></span>`;
+                if (data.ma10) html += `<span style="font-size: 14px;">MA10:<span style="color:#00BFFF; font-weight:600;">${data.ma10.toFixed(2)}</span></span>`;
+                if (data.ma20) html += `<span style="font-size: 14px;">MA20:<span style="color:#FF00FF; font-weight:600;">${data.ma20.toFixed(2)}</span></span>`;
+                if (data.ma30) html += `<span style="font-size: 14px;">MA30:<span style="color:#00FF00; font-weight:600;">${data.ma30.toFixed(2)}</span></span>`;
                 html += `</div>`;
                 
                 headerDiv.innerHTML = html;
@@ -12053,6 +13470,7 @@ TUSHARE_TOKEN=你的token
                     ],
                     dataZoom: [
                         { type: 'inside', xAxisIndex: [0,1], start: zoomStart, end: zoomEnd, zoomOnMouseWheel: false, moveOnMouseWheel: false }
+                        // 滑块已替换为按钮控制
                     ],
                     series: [
                         {
@@ -12796,8 +14214,8 @@ TUSHARE_TOKEN=你的token
                         axisLine: { lineStyle: { color: '#444' } }
                     },
                     dataZoom: [
-                        { type: 'inside', start: 0, end: 100 },
-                        { show: true, type: 'slider', bottom: 5, height: 12 }
+                        { type: 'inside', start: 0, end: 100, zoomOnMouseWheel: false, moveOnMouseWheel: false }
+                        // 滑块已替换为按钮控制
                     ],
                     series: [
                         {
@@ -12882,11 +14300,7 @@ TUSHARE_TOKEN=你的token
                 
                 for (let i = 0; i < combinations.length; i++) {
                     const params = combinations[i];
-                    const config = {
-                        ...currentConfig,
-                        ...(strategySpecificConfig[strategy] || {}),
-                        ...params
-                    };
+                    const config = getEffectiveStrategyConfig(strategy, params);
                     
                     const signals = executeStrategy(stockData, strategy, config);
                     const result = calculateBacktest(stockData, signals, initCapital);
@@ -13215,10 +14629,63 @@ TUSHARE_TOKEN=你的token
         let optimizationCharts = {};
 
         function getEffectiveStrategyConfig(strategyKey, overrides = null) {
+            // 硬编码的默认参数（作为备选）
+            const hardcodedDefaults = {
+                'mtsf_net': {
+                    mtsfLookback: 30,
+                    mtsfRetrainInterval: 20,
+                    mtsfMinProb: 0.52
+                },
+                'vpan_net': {
+                    vpanSeqLen: 20,
+                    vpanRetrainInterval: 25,
+                    vpanMinProb: 0.55
+                }
+            };
+            
+            // 确保 strategySpecificConfig 初始化
+            if (!strategySpecificConfig[strategyKey]) {
+                strategySpecificConfig[strategyKey] = {};
+            }
+            
+            // 获取策略特定参数的默认值
+            const specificParams = getStrategySpecificParams(strategyKey) || {};
+            
+            // 将默认值写入 strategySpecificConfig（如果未设置）
+            for (const [name, cfg] of Object.entries(specificParams)) {
+                if (cfg && cfg.key !== undefined && cfg.default !== undefined) {
+                    if (strategySpecificConfig[strategyKey][cfg.key] === undefined) {
+                        strategySpecificConfig[strategyKey][cfg.key] = cfg.default;
+                    }
+                }
+            }
+            
+            // 硬编码默认值也写入（如果未设置）
+            const fallbackDefaults = hardcodedDefaults[strategyKey] || {};
+            for (const [key, value] of Object.entries(fallbackDefaults)) {
+                if (strategySpecificConfig[strategyKey][key] === undefined) {
+                    strategySpecificConfig[strategyKey][key] = value;
+                }
+            }
+            
+            const specificConfig = strategySpecificConfig[strategyKey];
+            
+            console.log(`[getEffectiveStrategyConfig] ${strategyKey}:`, {
+                specificConfig,
+                hasMtsfLookback: 'mtsfLookback' in specificConfig,
+                hasVpanSeqLen: 'vpanSeqLen' in specificConfig
+            });
+            
             const base = {
                 ...currentConfig,
-                ...(strategySpecificConfig?.[strategyKey] || {})
+                ...specificConfig     // 用户自定义配置（已包含默认值）
             };
+            
+            console.log(`[getEffectiveStrategyConfig] ${strategyKey} result:`, {
+                mtsfLookback: base.mtsfLookback,
+                vpanSeqLen: base.vpanSeqLen
+            });
+            
             if (overrides && typeof overrides === 'object') {
                 return { ...base, ...overrides };
             }
@@ -13343,13 +14810,40 @@ TUSHARE_TOKEN=你的token
             };
 
             const mlParamRanges = {
-                rfLookback: { min: 120, max: 360, step: 30 },
-                rfHorizon: { min: 5, max: 20, step: 5 },
-                rfReturnThreshold: { min: 2, max: 12, step: 1 },
-                rfMinProb: { min: 0.55, max: 0.80, step: 0.03 },
-                rfRetrainInterval: { min: 10, max: 40, step: 5 },
-                rfTrees: { min: 15, max: 60, step: 5 },
-                rfMaxDepth: { min: 2, max: 6, step: 1 }
+                xgbLookback: { min: 150, max: 400, step: 25 },
+                xgbHorizon: { min: 10, max: 25, step: 5 },
+                xgbRetrainInterval: { min: 15, max: 45, step: 5 },
+                xgbMinProb: { min: 0.50, max: 0.70, step: 0.03 },
+                xgbMinAccuracy: { min: 0.50, max: 0.60, step: 0.02 },
+                xgbMaxDepth: { min: 4, max: 7, step: 1 },
+                xgbLearningRate: { min: 0.05, max: 0.12, step: 0.01 },
+                xgbNEstimators: { min: 100, max: 250, step: 25 },
+                xgbMinChildWeight: { min: 2, max: 6, step: 1 },
+                xgbSubsample: { min: 0.8, max: 0.95, step: 0.05 },
+                xgbColsample: { min: 0.8, max: 0.95, step: 0.05 },
+                xgbRegAlpha: { min: 0.0, max: 0.15, step: 0.03 },
+                xgbRegLambda: { min: 0.7, max: 1.2, step: 0.1 },
+                lstmLookback: { min: 150, max: 400, step: 25 },
+                lstmHorizon: { min: 10, max: 25, step: 5 },
+                lstmRetrainInterval: { min: 15, max: 45, step: 5 },
+                lstmSeqLen: { min: 20, max: 50, step: 5 },
+                lstmMinProb: { min: 0.50, max: 0.70, step: 0.03 },
+                lstmMinAccuracy: { min: 0.50, max: 0.60, step: 0.02 },
+                lstmUnits: { min: 64, max: 192, step: 32 },
+                lstmLayers: { min: 1, max: 3, step: 1 },
+                lstmDropout: { min: 0.2, max: 0.5, step: 0.05 },
+                lstmLearningRate: { min: 0.0001, max: 0.002, step: 0.0001 },
+                lstmEpochs: { min: 100, max: 200, step: 25 },
+                lstmBatchSize: { min: 32, max: 128, step: 16 },
+                lstmL2Reg: { min: 0.001, max: 0.02, step: 0.001 },
+                ensembleLookback: { min: 150, max: 400, step: 25 },
+                ensembleHorizon: { min: 10, max: 25, step: 5 },
+                ensembleRetrainInterval: { min: 15, max: 45, step: 5 },
+                ensembleSeqLen: { min: 20, max: 50, step: 5 },
+                ensembleMinProb: { min: 0.50, max: 0.70, step: 0.03 },
+                ensembleMinAccuracy: { min: 0.50, max: 0.60, step: 0.02 },
+                xgbWeight: { min: 0.3, max: 0.8, step: 0.1 },
+                lstmWeight: { min: 0.2, max: 0.7, step: 0.1 }
             };
 
             const seedFromString = (s) => {
@@ -13421,14 +14915,43 @@ TUSHARE_TOKEN=你的token
                             extraValueMap.chipSinglePeakRatio = buildRangeValues(chipParamRanges.chipSinglePeakRatio, 3);
                             extraValueMap.chipPeakMinPct = buildRangeValues(chipParamRanges.chipPeakMinPct, 3);
                             extraValueMap.chipLowPosPct = buildRangeValues(chipParamRanges.chipLowPosPct, 3);
-                        } else if (strategy === 'random_forest_ml' && optEnableMlParams) {
-                            extraValueMap.rfLookback = buildRangeValues(mlParamRanges.rfLookback, 0);
-                            extraValueMap.rfHorizon = buildRangeValues(mlParamRanges.rfHorizon, 0);
-                            extraValueMap.rfReturnThreshold = buildRangeValues(mlParamRanges.rfReturnThreshold, 1);
-                            extraValueMap.rfMinProb = buildRangeValues(mlParamRanges.rfMinProb, 3);
-                            extraValueMap.rfRetrainInterval = buildRangeValues(mlParamRanges.rfRetrainInterval, 0);
-                            extraValueMap.rfTrees = buildRangeValues(mlParamRanges.rfTrees, 0);
-                            extraValueMap.rfMaxDepth = buildRangeValues(mlParamRanges.rfMaxDepth, 0);
+                        } else if (strategy === 'xgboost_ml' && optEnableMlParams) {
+                            extraValueMap.xgbLookback = buildRangeValues(mlParamRanges.xgbLookback, 0);
+                            extraValueMap.xgbHorizon = buildRangeValues(mlParamRanges.xgbHorizon, 0);
+                            extraValueMap.xgbRetrainInterval = buildRangeValues(mlParamRanges.xgbRetrainInterval, 0);
+                            extraValueMap.xgbMinProb = buildRangeValues(mlParamRanges.xgbMinProb, 3);
+                            extraValueMap.xgbMinAccuracy = buildRangeValues(mlParamRanges.xgbMinAccuracy, 2);
+                            extraValueMap.xgbMaxDepth = buildRangeValues(mlParamRanges.xgbMaxDepth, 0);
+                            extraValueMap.xgbLearningRate = buildRangeValues(mlParamRanges.xgbLearningRate, 2);
+                            extraValueMap.xgbNEstimators = buildRangeValues(mlParamRanges.xgbNEstimators, 0);
+                            extraValueMap.xgbMinChildWeight = buildRangeValues(mlParamRanges.xgbMinChildWeight, 0);
+                            extraValueMap.xgbSubsample = buildRangeValues(mlParamRanges.xgbSubsample, 2);
+                            extraValueMap.xgbColsample = buildRangeValues(mlParamRanges.xgbColsample, 2);
+                            extraValueMap.xgbRegAlpha = buildRangeValues(mlParamRanges.xgbRegAlpha, 2);
+                            extraValueMap.xgbRegLambda = buildRangeValues(mlParamRanges.xgbRegLambda, 1);
+                        } else if (strategy === 'lstm_ml' && optEnableMlParams) {
+                            extraValueMap.lstmLookback = buildRangeValues(mlParamRanges.lstmLookback, 0);
+                            extraValueMap.lstmHorizon = buildRangeValues(mlParamRanges.lstmHorizon, 0);
+                            extraValueMap.lstmRetrainInterval = buildRangeValues(mlParamRanges.lstmRetrainInterval, 0);
+                            extraValueMap.lstmSeqLen = buildRangeValues(mlParamRanges.lstmSeqLen, 0);
+                            extraValueMap.lstmMinProb = buildRangeValues(mlParamRanges.lstmMinProb, 3);
+                            extraValueMap.lstmMinAccuracy = buildRangeValues(mlParamRanges.lstmMinAccuracy, 2);
+                            extraValueMap.lstmUnits = buildRangeValues(mlParamRanges.lstmUnits, 0);
+                            extraValueMap.lstmLayers = buildRangeValues(mlParamRanges.lstmLayers, 0);
+                            extraValueMap.lstmDropout = buildRangeValues(mlParamRanges.lstmDropout, 2);
+                            extraValueMap.lstmLearningRate = buildRangeValues(mlParamRanges.lstmLearningRate, 2);
+                            extraValueMap.lstmEpochs = buildRangeValues(mlParamRanges.lstmEpochs, 0);
+                            extraValueMap.lstmBatchSize = buildRangeValues(mlParamRanges.lstmBatchSize, 0);
+                            extraValueMap.lstmL2Reg = buildRangeValues(mlParamRanges.lstmL2Reg, 2);
+                        } else if (strategy === 'ensemble_ml' && optEnableMlParams) {
+                            extraValueMap.ensembleLookback = buildRangeValues(mlParamRanges.ensembleLookback, 0);
+                            extraValueMap.ensembleHorizon = buildRangeValues(mlParamRanges.ensembleHorizon, 0);
+                            extraValueMap.ensembleRetrainInterval = buildRangeValues(mlParamRanges.ensembleRetrainInterval, 0);
+                            extraValueMap.ensembleSeqLen = buildRangeValues(mlParamRanges.ensembleSeqLen, 0);
+                            extraValueMap.ensembleMinProb = buildRangeValues(mlParamRanges.ensembleMinProb, 3);
+                            extraValueMap.ensembleMinAccuracy = buildRangeValues(mlParamRanges.ensembleMinAccuracy, 2);
+                            extraValueMap.xgbWeight = buildRangeValues(mlParamRanges.xgbWeight, 2);
+                            extraValueMap.lstmWeight = buildRangeValues(mlParamRanges.lstmWeight, 2);
                         }
 
                         const extraKeys = Object.keys(extraValueMap).filter(k => Array.isArray(extraValueMap[k]) && extraValueMap[k].length > 0);
@@ -13867,22 +15390,22 @@ TUSHARE_TOKEN=你的token
                 if (chipLowPosPct !== undefined) parts.push(`低≤${Number(chipLowPosPct).toFixed(2)}`);
                 return parts.length ? parts.join(' ') : '-';
             }
-            if (strategyKey === 'random_forest_ml') {
-                const rfLookback = p.rfLookback ?? p.rf_lookback;
-                const rfHorizon = p.rfHorizon ?? p.rf_horizon;
-                const rfReturnThreshold = p.rfReturnThreshold ?? p.rf_return_threshold;
-                const rfMinProb = p.rfMinProb ?? p.rf_min_prob;
-                const rfRetrainInterval = p.rfRetrainInterval ?? p.rf_retrain_interval;
-                const rfTrees = p.rfTrees ?? p.rf_trees;
-                const rfMaxDepth = p.rfMaxDepth ?? p.rf_max_depth;
+            if (strategyKey === 'xgboost_ml') {
+                const xgbLookback = p.xgbLookback ?? p.xgb_lookback;
+                const xgbHorizon = p.xgbHorizon ?? p.xgb_horizon;
+                const xgbMinProb = p.xgbMinProb ?? p.xgb_min_prob;
+                const xgbRetrainInterval = p.xgbRetrainInterval ?? p.xgb_retrain_interval;
+                const xgbMaxDepth = p.xgbMaxDepth ?? p.xgb_max_depth;
+                const xgbLearningRate = p.xgbLearningRate ?? p.xgb_learning_rate;
+                const xgbNEstimators = p.xgbNEstimators ?? p.xgb_n_estimators;
                 const parts = [];
-                if (rfLookback !== undefined) parts.push(`窗${rfLookback}`);
-                if (rfHorizon !== undefined) parts.push(`期${rfHorizon}`);
-                if (rfReturnThreshold !== undefined) parts.push(`阈${Number(rfReturnThreshold).toFixed(1)}%`);
-                if (rfMinProb !== undefined) parts.push(`概${Number(rfMinProb).toFixed(2)}`);
-                if (rfRetrainInterval !== undefined) parts.push(`间${rfRetrainInterval}`);
-                if (rfTrees !== undefined) parts.push(`树${rfTrees}`);
-                if (rfMaxDepth !== undefined) parts.push(`深${rfMaxDepth}`);
+                if (xgbLookback !== undefined) parts.push(`窗${xgbLookback}`);
+                if (xgbHorizon !== undefined) parts.push(`期${xgbHorizon}`);
+                if (xgbMinProb !== undefined) parts.push(`概${Number(xgbMinProb).toFixed(2)}`);
+                if (xgbRetrainInterval !== undefined) parts.push(`间${xgbRetrainInterval}`);
+                if (xgbMaxDepth !== undefined) parts.push(`深${xgbMaxDepth}`);
+                if (xgbLearningRate !== undefined) parts.push(`率${Number(xgbLearningRate).toFixed(2)}`);
+                if (xgbNEstimators !== undefined) parts.push(`树${xgbNEstimators}`);
                 return parts.length ? parts.join(' ') : '-';
             }
             return '-';
