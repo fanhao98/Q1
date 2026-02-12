@@ -2526,10 +2526,15 @@ html[data-theme="light"] .toggle-slider:before {
     }
     
     #kline-header-info {
-        font-size: 10px;
+        font-size: 9px;
         left: 4px;
-        right: 20%;
+        right: 22%;
         top: 2px;
+        line-height: 1.4;
+        max-width: 75%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     
     #chipChart {
@@ -2689,9 +2694,14 @@ html[data-theme="light"] .toggle-slider:before {
     }
     
     #kline-header-info {
-        font-size: 9px;
+        font-size: 8px;
         left: 3px;
-        right: 18%;
+        right: 20%;
+        line-height: 1.3;
+        max-width: 78%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     
     #chipChart {
@@ -2750,6 +2760,123 @@ html[data-theme="light"] .toggle-slider:before {
         max-width: 55px;
         padding: 2px 3px;
         font-size: 9px;
+    }
+    
+    /* K线控制按钮移动端优化 */
+    .kline-controls,
+    .equity-controls,
+    .return-curve-controls {
+        gap: 4px !important;
+        padding: 6px 4px !important;
+        flex-wrap: wrap;
+    }
+    
+    .kline-ctrl-btn {
+        padding: 4px 6px !important;
+        font-size: 10px !important;
+        min-width: 50px;
+    }
+    
+    .kline-ctrl-btn span {
+        font-size: 11px !important;
+    }
+    
+    /* 策略卡片移动端优化 */
+    .strategy-cards {
+        grid-template-columns: 1fr !important;
+        gap: 8px;
+    }
+    
+    .strategy-card {
+        padding: 10px;
+    }
+    
+    .strategy-card h4 {
+        font-size: 13px;
+    }
+    
+    .strategy-card p {
+        font-size: 11px;
+    }
+    
+    /* 结果网格移动端优化 */
+    .result-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 6px;
+    }
+    
+    .result-item {
+        padding: 8px;
+    }
+    
+    .result-value {
+        font-size: 16px;
+    }
+    
+    .result-label {
+        font-size: 10px;
+    }
+    
+    /* 交易记录表格移动端优化 */
+    .trade-table {
+        font-size: 10px;
+    }
+    
+    .trade-table th,
+    .trade-table td {
+        padding: 4px 3px;
+    }
+    
+    /* 面板标题移动端优化 */
+    .panel-title {
+        font-size: 13px;
+        padding: 10px 12px;
+    }
+    
+    /* 图表容器移动端优化 */
+    .chart-box {
+        padding: 10px;
+    }
+    
+    .chart-title {
+        font-size: 12px;
+    }
+}
+
+/* 超小屏幕手机适配 */
+@media (max-width: 375px) {
+    #kline-header-info {
+        font-size: 7px;
+        left: 2px;
+        right: 22%;
+        line-height: 1.2;
+    }
+    
+    .kline-ctrl-btn {
+        padding: 3px 5px !important;
+        font-size: 9px !important;
+        min-width: 45px;
+    }
+    
+    .kline-ctrl-btn span {
+        font-size: 10px !important;
+    }
+    
+    .result-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    .result-value {
+        font-size: 14px;
+    }
+    
+    .comparison-table {
+        font-size: 8px;
+    }
+    
+    .comparison-table th,
+    .comparison-table td {
+        padding: 2px 1px;
     }
 }
 
@@ -13380,6 +13507,16 @@ TUSHARE_TOKEN=你的token
                 const headerDiv = document.getElementById('kline-header-info');
                 if (!headerDiv) return;
                 
+                // 根据屏幕宽度动态调整字体大小
+                const screenWidth = window.innerWidth;
+                const isMobile = screenWidth <= 768;
+                const isSmallMobile = screenWidth <= 375;
+                
+                const titleFontSize = isSmallMobile ? '12px' : (isMobile ? '13px' : '17px');
+                const labelFontSize = isSmallMobile ? '9px' : (isMobile ? '10px' : '14px');
+                const gap = isSmallMobile ? '6px' : (isMobile ? '8px' : '10px');
+                const lineHeight = isMobile ? '1.4' : '1.6';
+                
                 const closeColor = data.close >= data.open ? '#ff4757' : '#2ed573';
                 const pctColor = data.pctChange >= 0 ? '#ff4757' : '#2ed573';
                 let volRatio = null;
@@ -13396,26 +13533,28 @@ TUSHARE_TOKEN=你的token
                 } catch (e) {
                 }
                 
-                let html = `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; line-height:1.6;">`;
-                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: 17px;">${titleText}</span>`;
-                html += `<span style="color: #ccc; font-size: 14px;">${data.date}</span>`;
-                html += `<span style="font-size: 14px;">开:<span style="color:${closeColor}; font-weight:600;">${data.open.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 14px;">高:<span style="color:${closeColor}; font-weight:600;">${data.high.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 14px;">低:<span style="color:${closeColor}; font-weight:600;">${data.low.toFixed(2)}</span></span>`;
-                html += `<span style="font-size: 14px;">收:<span style="color:${closeColor}; font-weight:600;">${data.close.toFixed(2)}</span></span>`;
+                let html = `<div style="display:flex; gap:${gap}; flex-wrap:wrap; align-items:baseline; line-height:${lineHeight};">`;
+                html += `<span style="font-weight: bold; color: #e0e0e0; font-size: ${titleFontSize};">${titleText}</span>`;
+                html += `<span style="color: #ccc; font-size: ${labelFontSize};">${data.date}</span>`;
+                html += `<span style="font-size: ${labelFontSize};">开:<span style="color:${closeColor}; font-weight:600;">${data.open.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: ${labelFontSize};">高:<span style="color:${closeColor}; font-weight:600;">${data.high.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: ${labelFontSize};">低:<span style="color:${closeColor}; font-weight:600;">${data.low.toFixed(2)}</span></span>`;
+                html += `<span style="font-size: ${labelFontSize};">收:<span style="color:${closeColor}; font-weight:600;">${data.close.toFixed(2)}</span></span>`;
                 if (data.pctChange !== undefined) {
-                    html += `<span style="font-size: 14px;">幅:<span style="color:${pctColor}; font-weight:600;">${data.pctChange.toFixed(2)}%</span></span>`;
+                    html += `<span style="font-size: ${labelFontSize};">幅:<span style="color:${pctColor}; font-weight:600;">${data.pctChange.toFixed(2)}%</span></span>`;
                 }
-                html += `<span style="font-size: 14px;">量:<span style="color:#70a1ff; font-weight:600;">${(data.volume/10000).toFixed(0)}万</span></span>`;
-                if (volRatio !== null) html += `<span style="font-size: 14px;">量比:<span style="color:#1e90ff; font-weight:600;">${volRatio.toFixed(2)}</span></span>`;
-                if (data.turnover) html += `<span style="font-size: 14px;">换:<span style="color:#ffa502; font-weight:600;">${data.turnover.toFixed(2)}%</span></span>`;
+                html += `<span style="font-size: ${labelFontSize};">量:<span style="color:#70a1ff; font-weight:600;">${(data.volume/10000).toFixed(0)}万</span></span>`;
+                if (volRatio !== null) html += `<span style="font-size: ${labelFontSize};">量比:<span style="color:#1e90ff; font-weight:600;">${volRatio.toFixed(2)}</span></span>`;
+                if (data.turnover) html += `<span style="font-size: ${labelFontSize};">换:<span style="color:#ffa502; font-weight:600;">${data.turnover.toFixed(2)}%</span></span>`;
                 html += `</div>`;
 
-                html += `<div style="margin-top: 8px; display:flex; gap:10px; flex-wrap:wrap; line-height:1.6;">`;
-                if (data.ma5) html += `<span style="font-size: 14px;">MA5:<span style="color:#FFD700; font-weight:600;">${data.ma5.toFixed(2)}</span></span>`;
-                if (data.ma10) html += `<span style="font-size: 14px;">MA10:<span style="color:#00BFFF; font-weight:600;">${data.ma10.toFixed(2)}</span></span>`;
-                if (data.ma20) html += `<span style="font-size: 14px;">MA20:<span style="color:#FF00FF; font-weight:600;">${data.ma20.toFixed(2)}</span></span>`;
-                if (data.ma30) html += `<span style="font-size: 14px;">MA30:<span style="color:#00FF00; font-weight:600;">${data.ma30.toFixed(2)}</span></span>`;
+                const maGap = isSmallMobile ? '4px' : (isMobile ? '6px' : '10px');
+                const maMarginTop = isMobile ? '4px' : '8px';
+                html += `<div style="margin-top: ${maMarginTop}; display:flex; gap:${maGap}; flex-wrap:wrap; line-height:${lineHeight};">`;
+                if (data.ma5) html += `<span style="font-size: ${labelFontSize};">MA5:<span style="color:#FFD700; font-weight:600;">${data.ma5.toFixed(2)}</span></span>`;
+                if (data.ma10) html += `<span style="font-size: ${labelFontSize};">MA10:<span style="color:#00BFFF; font-weight:600;">${data.ma10.toFixed(2)}</span></span>`;
+                if (data.ma20) html += `<span style="font-size: ${labelFontSize};">MA20:<span style="color:#FF00FF; font-weight:600;">${data.ma20.toFixed(2)}</span></span>`;
+                if (data.ma30) html += `<span style="font-size: ${labelFontSize};">MA30:<span style="color:#00FF00; font-weight:600;">${data.ma30.toFixed(2)}</span></span>`;
                 html += `</div>`;
                 
                 headerDiv.innerHTML = html;
