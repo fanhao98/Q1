@@ -3,6 +3,3 @@ flask-cors
 tushare
 pandas
 numpy
-xgboost
-tensorflow
-scikit-learn

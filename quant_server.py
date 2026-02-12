@@ -23,7 +23,16 @@ import time
 import urllib.request
 import urllib.parse
 import urllib.error
-import xgboost as xgb
+
+# 可选依赖：XGBoost
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    print("警告: XGBoost未安装，XGBoost策略将不可用。安装命令: pip install xgboost")
+
+# 可选依赖：TensorFlow和scikit-learn
 try:
     from tensorflow import keras
     from tensorflow.keras.models import Sequential
@@ -37,7 +46,7 @@ try:
     TENSORFLOW_AVAILABLE = True
 except ImportError:
     TENSORFLOW_AVAILABLE = False
-    print("警告: TensorFlow或scikit-learn未安装，LSTM功能将不可用。安装命令: pip install tensorflow scikit-learn")
+    print("警告: TensorFlow或scikit-learn未安装，LSTM/MTSF-Net/VPAN功能将不可用。安装命令: pip install tensorflow scikit-learn")
 
 app = Flask(__name__)
 
@@ -2407,6 +2416,10 @@ class StrategyEngine:
     @staticmethod
     def xgboost_train_model(features, labels, config_params=None):
         """训练XGBoost模型"""
+        if not XGBOOST_AVAILABLE:
+            print("[XGBoost] 错误: XGBoost未安装")
+            return None
+            
         if len(features) < 50 or len(features) != len(labels):
             return None
         
@@ -2464,6 +2477,9 @@ class StrategyEngine:
     @staticmethod
     def xgboost_predict(model_dict, features):
         """使用XGBoost模型预测"""
+        if not XGBOOST_AVAILABLE:
+            return None
+            
         if model_dict is None or 'model' not in model_dict:
             return None
         
